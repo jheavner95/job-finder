@@ -7,7 +7,11 @@ import { OnboardingWizard } from "./OnboardingWizard";
 
 export const dynamic = "force-dynamic";
 
-export default async function GettingStartedPage() {
+export default async function GettingStartedPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ step?: string }>;
+}) {
   await ensureOnboarding(prisma);
   const state = await getOnboardingState(prisma);
   if (!state) throw new Error("Candidate workspace could not be initialized.");
@@ -18,6 +22,10 @@ export default async function GettingStartedPage() {
   const projects = [...state.portfolio].sort((left, right) =>
     right.portfolioReadiness - left.portfolioReadiness
     || left.name.localeCompare(right.name));
+  const requestedStep = Number((await searchParams).step);
+  const initialStep = Number.isInteger(requestedStep) && requestedStep >= 1 && requestedStep <= 5
+    ? requestedStep
+    : onboarding.currentStep;
 
   return (
     <div className="page onboarding-page">
@@ -27,7 +35,7 @@ export default async function GettingStartedPage() {
         action={<span className="privacy-badge">● Private · stays on this Mac</span>}
       />
       <OnboardingWizard
-        initialStep={onboarding.currentStep}
+        initialStep={initialStep}
         completed={Boolean(onboarding.completedAt)}
         baselineReadiness={onboarding.baselineReadiness}
         currentReadiness={state.readiness}

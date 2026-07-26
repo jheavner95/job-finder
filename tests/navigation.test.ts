@@ -13,7 +13,7 @@ describe("workflow navigation", () => {
     expect(NAV_GROUPS.map((group) => group.items.map((item) => item.label))).toEqual([
       ["Dashboard", "Daily Briefing", "Review Queue"],
       ["Sources", "Saved Searches", "Import Jobs"],
-      ["Job Finder", "Career Evidence"],
+      ["Career Profile", "Career Evidence"],
       ["Notifications", "Reports"],
     ]);
     const routes = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));

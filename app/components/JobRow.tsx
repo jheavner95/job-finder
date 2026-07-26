@@ -22,7 +22,7 @@ export function JobRow({ job }: { job: JobListItem }) {
         href={`/jobs/${job.id}`}
         aria-label={`Open ${job.title} at ${job.company}`}
       >
-        <span className="company-avatar">{job.companyInitials}</span>
+        <span className="provider-avatar" aria-label={`${job.source} provider`}>{job.source.slice(0, 1).toUpperCase()}</span>
         <span className="job-copy">
           <span className="job-topline">
             <strong>{job.title}</strong>
@@ -33,6 +33,12 @@ export function JobRow({ job }: { job: JobListItem }) {
             {job.location}<i>·</i>{job.remoteStatus}<i>·</i>{job.employmentType}
           </span>
           <span className="match-line">{job.matchReason}</span>
+          <span
+            className={`verification-badge verification-${job.verification.tone}`}
+            title={`Imported from ${job.source}. ${job.verification.label}.`}
+          >
+            {job.verification.tone === "verified" ? "✓ " : ""}{job.verification.label}
+          </span>
           {job.concerns[0] && <span className="concern-line">Watch: {job.concerns[0]}</span>}
         </span>
       </Link>
@@ -45,7 +51,7 @@ export function JobRow({ job }: { job: JobListItem }) {
           <span className="eligibility-label">Hard requirement conflict</span>
         )}
         <span className="comp">{job.compensation}</span>
-        <span className="source">{job.source} · {job.posted}</span>
+        <span className="source">{job.verification.officialAts} · {job.verification.importAge}</span>
       </div>
     </article>
   );

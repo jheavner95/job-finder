@@ -28,29 +28,51 @@ export async function importJobPreview(
   return database.$transaction(async (transaction) => {
     const duplicate = await transaction.job.findUnique({
       where: { fingerprint: normalized.fingerprint },
-      select: { id: true },
+      select: {
+        id: true,
+        title: true,
+        location: true,
+        compensationText: true,
+        normalizedDescription: true,
+        normalizedRequirements: true,
+      },
     });
 
     let jobId: string;
     if (duplicate) {
       jobId = duplicate.id;
+      const changes = [
+        duplicate.title !== normalized.title && { field: "Title", before: duplicate.title, after: normalized.title },
+        duplicate.location !== normalized.location && { field: "Location", before: duplicate.location, after: normalized.location },
+        duplicate.compensationText !== normalized.salary && { field: "Salary", before: duplicate.compensationText, after: normalized.salary },
+        duplicate.normalizedDescription !== normalized.description && { field: "Description", before: duplicate.normalizedDescription, after: normalized.description },
+        JSON.stringify(duplicate.normalizedRequirements) !== JSON.stringify(normalized.requirements) && {
+          field: "Requirements",
+          before: duplicate.normalizedRequirements,
+          after: normalized.requirements,
+        },
+      ].filter(Boolean);
       await transaction.job.update({
         where: { id: duplicate.id },
         data: {
           lastSeenAt: new Date(),
           activity: {
-            create: {
-              type: "duplicate_import",
-              summary:
-                "A manual import matched this opportunity and was preserved without creating a duplicate.",
-              metadata: {
-                importedAt: new Date().toISOString(),
-                sourceUrl: normalized.sourceUrl,
-                originalPosting: normalized.description,
-                normalizedRequirements: normalized.requirements,
-                normalizedConcerns: normalized.concerns,
+            create: [
+              {
+                type: "duplicate_import",
+                summary:
+                  "A repeat import matched this opportunity; no duplicate record was created.",
+                metadata: {
+                  importedAt: new Date().toISOString(),
+                  sourceUrl: normalized.sourceUrl,
+                },
               },
-            },
+              ...(changes.length ? [{
+                type: "posting_change_detected",
+                summary: `${changes.length} posting change${changes.length === 1 ? "" : "s"} detected.`,
+                metadata: { changes },
+              }] : []),
+            ],
           },
         },
       });
@@ -74,7 +96,7 @@ export async function importJobPreview(
           employmentType: normalized.employmentType,
           compensationText: normalized.salary,
           sourceUrl: normalized.sourceUrl,
-          originalSourceText: preview.input.description,
+          originalSourceText: normalized.description,
           normalizedDescription: normalized.description,
           normalizedRequirements: normalized.requirements,
           normalizedConcerns: normalized.concerns,
@@ -110,6 +132,14 @@ export async function importJobPreview(
         },
         categoryResults: evaluation.categories,
         scoringVersion: "deterministic-v1",
+      },
+    });
+    await transaction.activityEvent.create({
+      data: {
+        jobId,
+        type: "job_rescored",
+        summary: `Deterministic evaluation completed with a score of ${evaluation.score}.`,
+        metadata: { scoringVersion: "deterministic-v1", score: evaluation.score },
       },
     });
 

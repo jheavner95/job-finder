@@ -12,6 +12,7 @@ import {
   deserializeOpportunityIntelligence,
   ensureOpportunityIntelligence,
 } from "./candidate-intelligence/service";
+import { normalizePostingContent, plainPostingText } from "./job-content";
 
 const jobInclude = {
   company: true,
@@ -98,6 +99,32 @@ function currentStatus(job: IncludedJob) {
   return statusFromPrisma[job.decisions[0]?.decision ?? job.status];
 }
 
+function ageLabel(date: Date) {
+  const minutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60_000));
+  if (minutes < 60) return minutes <= 1 ? "Just imported" : `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function verification(job: IncludedJob) {
+  const closed = Boolean(job.closedAt) || currentStatus(job) === "Closed";
+  const ageDays = Math.floor((Date.now() - job.lastSeenAt.getTime()) / 86_400_000);
+  return {
+    label: closed ? "Posting Closed" : ageDays <= 0 ? "Verified Today" : ageDays === 1 ? "Verified Yesterday" : "Needs Verification",
+    tone: closed ? "closed" as const : ageDays <= 1 ? "verified" as const : "warning" as const,
+    importedAt: job.firstSeenAt.toISOString(),
+    lastVerifiedAt: job.lastSeenAt.toISOString(),
+    importAge: ageLabel(job.firstSeenAt),
+    officialAts: job.source.name === "Manual import" ? "Manual import" : job.source.name,
+  };
+}
+
+function clean(value: string) {
+  return plainPostingText(value);
+}
+
 function toListItem(job: IncludedJob): JobListItem {
   const evaluation = job.evaluations[0];
   const metadata = evaluation
@@ -105,20 +132,22 @@ function toListItem(job: IncludedJob): JobListItem {
     : { confidence: 0, eligibility: "eligible" as const };
   return {
     id: job.id,
-    title: job.title,
-    company: job.company.name,
+    title: clean(job.title),
+    company: clean(job.company.name),
     companyInitials: job.company.name
       .split(/\s+/)
       .map((part) => part[0])
       .join("")
       .slice(0, 2)
       .toUpperCase(),
-    location: job.location ?? "Location unavailable",
+    location: job.location ? clean(job.location) : "Location unavailable",
     remoteStatus: job.remoteStatus ?? "Work model unavailable",
     employmentType: job.employmentType ?? "Employment type unavailable",
     compensation: compensation(job),
     posted: postedLabel(job.postedAt),
     source: job.source.name,
+    sourceUrl: job.sourceUrl,
+    verification: verification(job),
     status: currentStatus(job),
     score: evaluation?.score ?? 0,
     confidence: metadata.confidence,
@@ -126,9 +155,9 @@ function toListItem(job: IncludedJob): JobListItem {
     summary: evaluation
       ? summaryFromReasoning(evaluation.reasoning)
       : "Not yet evaluated.",
-    matchReason: job.intelligence?.topReason
-      ?? (evaluation ? summaryFromReasoning(evaluation.reasoning) : "Not yet evaluated."),
-    concerns: stringArray(job.normalizedConcerns),
+    matchReason: clean(job.intelligence?.topReason
+      ?? (evaluation ? summaryFromReasoning(evaluation.reasoning) : "Not yet evaluated.")),
+    concerns: stringArray(job.normalizedConcerns).map(clean),
     isSynthetic: job.isSynthetic,
   };
 }
@@ -148,10 +177,31 @@ export async function getJob(id: string): Promise<JobDetailModel | null> {
   const job = await prisma.job.findFirst({ where: { id, isSynthetic: false }, include: jobInclude });
   if (!job) return null;
   const evaluation = job.evaluations[0];
+  const events = await prisma.activityEvent.findMany({
+    where: { jobId: job.id },
+    orderBy: { createdAt: "desc" },
+  });
+  const duplicateImports = events.filter((event) => event.type === "duplicate_import").length;
+  const metadataObject = (value: Prisma.JsonValue | null) =>
+    typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};
   return {
     ...toListItem(job),
-    sourceUrl: job.sourceUrl,
-    description: job.originalSourceText,
+    provenance: {
+      discoveryMethod: job.sourceJobId ? "Public ATS discovery" : job.source.name === "Manual import" ? "Manual import" : "Certified connector import",
+      canonicalUrl: job.sourceUrl,
+      duplicateImports,
+      availability: job.closedAt || currentStatus(job) === "Closed" ? "Closed" : "Active",
+    },
+    originalPosting: {
+      title: clean(job.title),
+      company: clean(job.company.name),
+      location: job.location ? clean(job.location) : "Not listed",
+      employmentType: job.employmentType ? clean(job.employmentType) : "Not listed",
+      compensation: compensation(job),
+      remoteStatus: job.remoteStatus ? clean(job.remoteStatus) : "Not listed",
+      description: normalizePostingContent(job.originalSourceText),
+    },
+    description: normalizePostingContent(job.originalSourceText),
     requirements: stringArray(job.normalizedRequirements),
     companyNotes: job.company.notes ?? "No company notes recorded.",
     categoryResults: evaluation
@@ -165,19 +215,25 @@ export async function getJob(id: string): Promise<JobDetailModel | null> {
         relevance: item.relevance,
         contextFile: item.contextFile,
       })) ?? [],
-    activity: await prisma.activityEvent
-      .findMany({
-        where: { jobId: job.id },
-        orderBy: { createdAt: "desc" },
-      })
-      .then((events) =>
-        events.map((event) => ({
+    activity: events.map((event) => {
+          const metadata = metadataObject(event.metadata);
+          const changes = Array.isArray(metadata.changes) ? metadata.changes : [];
+          return {
           id: event.id,
           type: event.type,
           summary: event.summary,
+          source: typeof metadata.source === "string" ? metadata.source : job.source.name,
           createdAt: event.createdAt.toISOString(),
-        })),
-      ),
+          changes: changes.flatMap((change) => {
+            if (typeof change !== "object" || change === null || Array.isArray(change)) return [];
+            return [{
+              field: typeof change.field === "string" ? change.field : "Posting",
+              before: typeof change.before === "string" ? clean(change.before) : "Not listed",
+              after: typeof change.after === "string" ? clean(change.after) : "Not listed",
+            }];
+          }),
+        };
+      }),
     intelligence: job.intelligence
       ? deserializeOpportunityIntelligence(job.intelligence)
       : null,

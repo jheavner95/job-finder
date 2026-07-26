@@ -8,6 +8,7 @@ import type {
   ProviderNormalizedOpportunity,
   ProviderValidation,
 } from "./types";
+import { normalizePostingContent } from "../job-content";
 
 export type JobSourceProvider = {
   readonly id: string;
@@ -73,22 +74,5 @@ export async function fetchJson(
 }
 
 export function textFromHtml(value: string) {
-  const decode = (text: string) => text
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&#(\d+);/g, (_match, code: string) =>
-      String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_match, code: string) =>
-      String.fromCodePoint(Number.parseInt(code, 16)));
-  return decode(decode(value))
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|li|div|h[1-6])>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n\s*\n+/g, "\n")
-    .trim();
+  return normalizePostingContent(value);
 }

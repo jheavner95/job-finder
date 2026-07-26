@@ -13,6 +13,15 @@ export type JobListItem = {
   compensation: string;
   posted: string;
   source: string;
+  sourceUrl: string;
+  verification: {
+    label: string;
+    tone: "verified" | "warning" | "closed";
+    importedAt: string;
+    lastVerifiedAt: string;
+    importAge: string;
+    officialAts: string;
+  };
   status: JobStatus;
   score: number;
   confidence: number;
@@ -23,7 +32,21 @@ export type JobListItem = {
   isSynthetic: boolean;
 };
 export type JobDetailModel = JobListItem & {
-  sourceUrl: string;
+  provenance: {
+    discoveryMethod: string;
+    canonicalUrl: string;
+    duplicateImports: number;
+    availability: string;
+  };
+  originalPosting: {
+    title: string;
+    company: string;
+    location: string;
+    employmentType: string;
+    compensation: string;
+    remoteStatus: string;
+    description: string;
+  };
   description: string;
   requirements: string[];
   companyNotes: string;
@@ -39,7 +62,9 @@ export type JobDetailModel = JobListItem & {
     id: string;
     type: string;
     summary: string;
+    source: string;
     createdAt: string;
+    changes: { field: string; before: string; after: string }[];
   }[];
   intelligence: OpportunityIntelligenceData | null;
 };

@@ -21,7 +21,7 @@ export const NAV_GROUPS = [
     id: "career",
     label: "Career",
     items: [
-      { href: "/context", label: "Job Finder", icon: "target" },
+      { href: "/context", label: "Career Profile", icon: "target" },
       { href: "/evidence", label: "Career Evidence", icon: "folder" },
     ],
   },

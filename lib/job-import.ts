@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createJobFingerprint } from "./fingerprint";
 import { scoreJob, type ScoreResult } from "./scoring";
 import type { CategoryInput } from "./types";
+import { normalizePostingContent } from "./job-content";
 
 const optionalText = z.string().trim().max(500).optional().default("");
 
@@ -195,7 +196,7 @@ export function buildImportScoringInputs(
 }
 
 export function normalizeJobImport(input: JobImportInput): NormalizedJobImport {
-  const description = cleanWhitespace(input.description);
+  const description = normalizePostingContent(input.description);
   const location = cleanWhitespace(input.location);
   const lines = linesFromDescription(description);
   const fingerprint = createJobFingerprint({

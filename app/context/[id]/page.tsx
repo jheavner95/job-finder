@@ -19,10 +19,10 @@ export default async function ContextDetailPage({
 
   return (
     <div className="page context-detail-page">
-      <Link className="back-button context-back" href="/context">← Job Finder</Link>
+      <Link className="back-button context-back" href="/context">← Career Profile</Link>
       <header className="context-detail-header">
         <div>
-          <p className="eyebrow">Job Finder profile area</p>
+          <p className="eyebrow">Career Profile area</p>
           <h1>{document.name}</h1>
           <p>{document.purpose}</p>
         </div>

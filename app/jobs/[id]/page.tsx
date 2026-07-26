@@ -4,6 +4,7 @@ import { DecisionForm } from "@/app/components/DecisionForm";
 import { StatusPill } from "@/app/components/JobRow";
 import { getJob } from "@/lib/queries";
 import type { IntelligenceGuidanceItem } from "@/lib/candidate-intelligence/types";
+import { PostingContent } from "@/app/components/PostingContent";
 
 export const dynamic = "force-dynamic";
 
@@ -54,10 +55,12 @@ export default async function JobDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ import?: string }>;
+  searchParams: Promise<{ import?: string; inspect?: string }>;
 }) {
   const { id } = await params;
-  const importState = (await searchParams).import;
+  const query = await searchParams;
+  const importState = query.import;
+  const canInspect = process.env.NODE_ENV === "development" || process.env.JOB_FINDER_DEVELOPER_MODE === "true";
   const job = await getJob(id);
   if (!job) notFound();
 
@@ -92,6 +95,29 @@ export default async function JobDetailPage({
         <div><small>Eligibility</small><strong>{job.eligibility === "excluded" ? "Hard requirement conflict" : "No hard conflict found"}</strong></div>
         <div><small>Record type</small><strong>Imported opportunity</strong></div>
       </div>
+      <section className="provenance-card" aria-labelledby="source-verification-heading">
+        <div className="provenance-heading">
+          <div>
+            <p className="eyebrow">Trust & traceability</p>
+            <h2 id="source-verification-heading">Source &amp; Verification</h2>
+          </div>
+          <span className={`verification-badge verification-${job.verification.tone}`}>
+            {job.verification.tone === "verified" ? "✓ " : ""}{job.verification.label}
+          </span>
+        </div>
+        <dl className="provenance-grid">
+          <div><dt>Provider</dt><dd>{job.source}</dd></div>
+          <div><dt>Company</dt><dd>{job.company}</dd></div>
+          <div><dt>Official ATS</dt><dd>{job.verification.officialAts}</dd></div>
+          <div><dt>Discovery method</dt><dd>{job.provenance.discoveryMethod}</dd></div>
+          <div><dt>Imported at</dt><dd>{new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(job.verification.importedAt))}</dd></div>
+          <div><dt>Last verified</dt><dd>{new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(job.verification.lastVerifiedAt))}</dd></div>
+          <div><dt>Duplicate imports</dt><dd>{job.provenance.duplicateImports}</dd></div>
+          <div><dt>Current availability</dt><dd>{job.provenance.availability}</dd></div>
+          <div className="provenance-link"><dt>Original posting URL</dt><dd><Link href={job.sourceUrl} target="_blank" rel="noreferrer">{job.sourceUrl}</Link></dd></div>
+          <div className="provenance-link"><dt>Canonical URL</dt><dd><Link href={job.provenance.canonicalUrl} target="_blank" rel="noreferrer">{job.provenance.canonicalUrl}</Link></dd></div>
+        </dl>
+      </section>
       <div className="detail-layout">
         <div className="detail-content">
           <section>
@@ -170,10 +196,18 @@ export default async function JobDetailPage({
             </>
           )}
           <section>
-            <p className="eyebrow">Original job description</p>
-            <h2>Preserved source text</h2>
-            <p>{job.description}</p>
-            <p className="source-caption">Original listing · Imported opportunity</p>
+            <p className="eyebrow">Source record</p>
+            <h2>Original Posting</h2>
+            <dl className="posting-facts">
+              <div><dt>Original title</dt><dd>{job.originalPosting.title}</dd></div>
+              <div><dt>Original company</dt><dd>{job.originalPosting.company}</dd></div>
+              <div><dt>Original location</dt><dd>{job.originalPosting.location}</dd></div>
+              <div><dt>Employment type</dt><dd>{job.originalPosting.employmentType}</dd></div>
+              <div><dt>Salary</dt><dd>{job.originalPosting.compensation}</dd></div>
+              <div><dt>Remote status</dt><dd>{job.originalPosting.remoteStatus}</dd></div>
+            </dl>
+            <PostingContent content={job.originalPosting.description} />
+            <p className="source-caption">Formatting normalized from the official source. Unsafe HTML and tracking content are removed.</p>
           </section>
           <section>
             <p className="eyebrow">Role requirements</p>
@@ -210,11 +244,29 @@ export default async function JobDetailPage({
             {job.activity.length ? (
               <div className="timeline">
                 {job.activity.map((item) => (
-                  <div key={item.id}><span /><p><strong>{item.summary}</strong><small>{new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.createdAt))}</small></p></div>
+                  <div key={item.id}><span /><p><strong>{item.summary}</strong><small>{item.source} · {new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.createdAt))}</small>
+                    {item.changes.map((change) => <em key={`${item.id}-${change.field}`}>{change.field}: {change.before} → {change.after}</em>)}
+                  </p></div>
                 ))}
               </div>
             ) : <p>No activity has been recorded.</p>}
           </section>
+          {canInspect && (
+            <section>
+              <p className="eyebrow">Developer tools</p>
+              <h2>Developer inspection</h2>
+              {query.inspect === "1" ? (
+                <>
+                  <p><Link href={`/jobs/${job.id}`}>Hide developer inspection</Link></p>
+                  <details open><summary>Raw provider payload</summary><pre>{JSON.stringify({ retained: false, reason: "Raw provider payloads are not persisted. Preserved posting content is available in the normalized record." }, null, 2)}</pre></details>
+                  <details><summary>Normalized record</summary><pre>{JSON.stringify(job.originalPosting, null, 2)}</pre></details>
+                  <details><summary>Scoring inputs</summary><pre>{JSON.stringify(job.categoryResults, null, 2)}</pre></details>
+                  <details><summary>Evidence matches</summary><pre>{JSON.stringify(job.evidence, null, 2)}</pre></details>
+                  <details><summary>Opportunity Intelligence</summary><pre>{JSON.stringify(job.intelligence, null, 2)}</pre></details>
+                </>
+              ) : <Link href={`/jobs/${job.id}?inspect=1`}>Inspect record</Link>}
+            </section>
+          )}
         </div>
         <DecisionForm jobId={job.id} currentStatus={job.status} />
       </div>
