@@ -27,7 +27,6 @@ export function JobRow({ job }: { job: JobListItem }) {
           <span className="job-topline">
             <strong>{job.title}</strong>
             <StatusPill status={job.status} />
-            {job.isSynthetic && <span className="synthetic-badge">Sample</span>}
           </span>
           <span className="company-name">{job.company}</span>
           <span className="job-meta">

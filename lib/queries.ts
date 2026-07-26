@@ -136,6 +136,7 @@ function toListItem(job: IncludedJob): JobListItem {
 export async function getJobs(): Promise<JobListItem[]> {
   await ensureOpportunityIntelligence(prisma);
   const jobs = await prisma.job.findMany({
+    where: { isSynthetic: false },
     include: jobInclude,
     orderBy: { title: "asc" },
   });
@@ -144,7 +145,7 @@ export async function getJobs(): Promise<JobListItem[]> {
 
 export async function getJob(id: string): Promise<JobDetailModel | null> {
   await ensureOpportunityIntelligence(prisma, { jobIds: [id] });
-  const job = await prisma.job.findUnique({ where: { id }, include: jobInclude });
+  const job = await prisma.job.findFirst({ where: { id, isSynthetic: false }, include: jobInclude });
   if (!job) return null;
   const evaluation = job.evaluations[0];
   return {

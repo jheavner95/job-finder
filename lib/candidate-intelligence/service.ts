@@ -22,6 +22,13 @@ export async function ensureOpportunityIntelligence(
   database: PrismaClient,
   options: { jobIds?: string[]; force?: boolean } = {},
 ) {
+  const jobCount = await database.job.count({
+    where: {
+      isSynthetic: false,
+      id: options.jobIds?.length ? { in: options.jobIds } : undefined,
+    },
+  });
+  if (jobCount === 0) return { jobs: 0, generated: 0 };
   // Regenerating opportunity guidance must not replace enriched candidate
   // evidence. Profile synchronization is independently idempotent.
   const profile = await syncCandidateProfile(database);

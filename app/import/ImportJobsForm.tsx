@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 
+import { ErrorNotice } from "@/app/components/ErrorNotice";
 import {
   importJobAction,
   previewJobAction,
@@ -37,6 +38,7 @@ export function ImportJobsForm() {
           <p>Enter the posting directly. The URL is stored as source context; this workspace never fetches or scrapes it.</p>
         </div>
         <div className="import-fields">
+          {state.actionError && <div className="wide"><ErrorNotice error={state.actionError} level="inline" /></div>}
           <label>
             Job title
             <input name="title" defaultValue={state.values?.title} aria-describedby={state.errors?.title ? "title-error" : undefined} />

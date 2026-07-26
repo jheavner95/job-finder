@@ -33,7 +33,7 @@ async function readContext(file: string) {
     return await readFile(join(process.cwd(), "context", file), "utf8");
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return readFile(join(process.cwd(), "context", "example", file), "utf8");
+      return null;
     }
     throw error;
   }
@@ -95,14 +95,6 @@ function profileEvidence(content: string): EvidenceDefinition[] {
   ];
 }
 
-function portfolioProjects(content: string) {
-  const confirmed = content.match(/## Confirmed information\s*([\s\S]*?)(?=\n## |\s*$)/i)?.[1] ?? "";
-  return confirmed
-    .split("\n")
-    .map((line) => line.match(/^\s*-\s+(.+)$/)?.[1]?.trim())
-    .filter((value): value is string => Boolean(value && !value.includes(":")));
-}
-
 export async function syncCandidateProfile(
   database: PrismaClient,
   options: { force?: boolean } = {},
@@ -118,6 +110,7 @@ export async function syncCandidateProfile(
     ["portfolio-evidence.md", portfolioEvidence],
   ]);
   const sourceDates = [...documents.values()].flatMap((content) => {
+    if (!content) return [];
     const value = content.match(/^last_updated:\s*(\d{4}-\d{2}-\d{2})$/m)?.[1];
     return value ? [new Date(`${value}T00:00:00`)] : [];
   });
@@ -129,11 +122,17 @@ export async function syncCandidateProfile(
     include: {
       evidence: {
         include: {
-          projectLinks: { include: { project: true } },
+          projectLinks: {
+            where: { project: { archivedAt: null } },
+            include: { project: true },
+          },
           resumeLinks: { include: { resumeEvidence: true } },
         },
       },
-      portfolio: { include: { capabilityLinks: true } },
+      portfolio: {
+        where: { archivedAt: null },
+        include: { capabilityLinks: true },
+      },
     },
   });
   if (
@@ -145,12 +144,11 @@ export async function syncCandidateProfile(
     return existing;
   }
 
-  const availableEvidence = profileEvidence(careerProfile);
-  const availableProjects = portfolioProjects(portfolioEvidence);
-  const candidateName = field(careerProfile, "Candidate") ?? "Candidate";
-  const headline = field(careerProfile, "Professional position") ?? "Job seeker";
+  const availableEvidence = careerProfile ? profileEvidence(careerProfile) : [];
+  const candidateName = careerProfile ? field(careerProfile, "Candidate") ?? "Candidate" : "Candidate";
+  const headline = careerProfile ? field(careerProfile, "Professional position") ?? "Profile not configured" : "Profile not configured";
   const yearsExperience = Number.parseInt(
-    field(careerProfile, "Approximate experience")?.match(/\d+/)?.[0] ?? "",
+    (careerProfile ? field(careerProfile, "Approximate experience") : null)?.match(/\d+/)?.[0] ?? "",
     10,
   );
 
@@ -183,29 +181,6 @@ export async function syncCandidateProfile(
         })),
       });
     }
-    for (const name of availableProjects) {
-      await transaction.candidatePortfolioProject.upsert({
-        where: { profileId_name: { profileId: PROFILE_ID, name } },
-        create: {
-          id: `portfolio-${slug(name)}`,
-          profileId: PROFILE_ID,
-          name,
-          evidenceStatus: "high-level-context-only",
-          sourceDocument: "portfolio-evidence.md",
-          sourceExcerpt: `${name} is listed as a project context; responsibilities and outcomes are not yet mapped.`,
-        },
-        update: {
-          sourceDocument: "portfolio-evidence.md",
-          sourceExcerpt: `${name} is listed as a project context; responsibilities and outcomes are not yet mapped.`,
-        },
-      });
-    }
-    await transaction.candidatePortfolioProject.deleteMany({
-      where: {
-        profileId: PROFILE_ID,
-        name: { notIn: availableProjects },
-      },
-    });
   });
 
   return database.candidateProfile.findUniqueOrThrow({
@@ -213,11 +188,17 @@ export async function syncCandidateProfile(
     include: {
       evidence: {
         include: {
-          projectLinks: { include: { project: true } },
+          projectLinks: {
+            where: { project: { archivedAt: null } },
+            include: { project: true },
+          },
           resumeLinks: { include: { resumeEvidence: true } },
         },
       },
-      portfolio: { include: { capabilityLinks: true } },
+      portfolio: {
+        where: { archivedAt: null },
+        include: { capabilityLinks: true },
+      },
     },
   });
 }

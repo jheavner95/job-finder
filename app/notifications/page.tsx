@@ -40,7 +40,7 @@ export default async function NotificationsPage() {
             </div>
           </article>
         ))}
-        {!notifications.length && <div className="briefing-empty"><strong>No notifications yet.</strong><p>Completed searches and source issues will appear here.</p></div>}
+        {!notifications.length && <div className="briefing-empty"><strong>You’re all caught up.</strong><p>Completed searches and source issues will appear here.</p></div>}
       </div>
     </div>
   );

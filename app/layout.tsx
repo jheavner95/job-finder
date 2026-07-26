@@ -25,7 +25,7 @@ async function RootLayoutContent({ children }: Readonly<{ children: React.ReactN
     <html lang="en">
       <body>
         <a className="skip-link" href="#main-content">Skip to main content</a>
-        <AppShell showGettingStarted={onboarding?.shouldShowPrimary ?? false}>{children}</AppShell>
+        <AppShell showGettingStarted={onboarding?.shouldShowPrimary ?? true}>{children}</AppShell>
       </body>
     </html>
   );

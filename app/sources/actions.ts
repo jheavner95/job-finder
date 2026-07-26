@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/db";
 import { jobSourceRegistry } from "@/lib/job-sources/registry";
-import { DEFAULT_PRODUCT_DESIGN_SEARCH } from "@/lib/job-sources/types";
+import { EMPTY_JOB_SEARCH } from "@/lib/job-sources/types";
 import { DiscoveryScheduler } from "@/lib/scheduling/discovery-scheduler";
 
 const connectorSchema = z.object({
@@ -44,9 +44,6 @@ export async function addCompanyConnectorAction(formData: FormData) {
       connectorKey: parsed.data.connectorKey,
       crawlDelay: parsed.data.crawlDelay,
       rateLimit: parsed.data.rateLimit,
-      enabled: true,
-      health: "Warning",
-      searchCriteria: DEFAULT_PRODUCT_DESIGN_SEARCH,
       notes: parsed.data.notes || null,
       schedule: {
         upsert: {
@@ -62,9 +59,9 @@ export async function addCompanyConnectorAction(formData: FormData) {
       connectorKey: parsed.data.connectorKey,
       crawlDelay: parsed.data.crawlDelay,
       rateLimit: parsed.data.rateLimit,
-      enabled: true,
-      health: "Warning",
-      searchCriteria: DEFAULT_PRODUCT_DESIGN_SEARCH,
+      enabled: false,
+      health: "Disabled",
+      searchCriteria: EMPTY_JOB_SEARCH,
       notes: parsed.data.notes || null,
       schedule: {
         create: { scheduleType: "Manual" },

@@ -1,5 +1,6 @@
 import { PageHeader } from "@/app/components/PageHeader";
 import { prisma } from "@/lib/db";
+import { mapError } from "@/lib/errors/app-error";
 import { jobSourceRegistry } from "@/lib/job-sources/registry";
 import { scheduleLabel } from "@/lib/scheduling/schedule";
 
@@ -20,6 +21,12 @@ function lastCrawl(value: Date | null) {
     hour: "numeric",
     minute: "2-digit",
   }).format(value);
+}
+
+function safeSourceError(value: string | null | undefined) {
+  if (!value) return "—";
+  const error = mapError(value, { route: "/sources" });
+  return `${error.title} ${error.message}`;
 }
 
 export default async function SourcesPage({
@@ -127,7 +134,7 @@ export default async function SourcesPage({
                   <td>{crawl?.duplicates ?? "—"}</td>
                   <td>{crawl?.failures ?? "—"}</td>
                   <td className="source-error">
-                    {crawl?.lastError ?? "—"}
+                    {safeSourceError(crawl?.lastError)}
                     <small>{recentFailures.length} recent failed checks · {recentImports} recent imports</small>
                   </td>
                   <td className="source-actions">
@@ -145,7 +152,7 @@ export default async function SourcesPage({
               );
             })}
             {!connectors.length && (
-              <tr><td colSpan={11} className="sources-empty">No company sources configured.</td></tr>
+              <tr><td colSpan={11} className="sources-empty">No job sources have been added.</td></tr>
             )}
           </tbody>
         </table>

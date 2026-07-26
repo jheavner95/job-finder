@@ -388,6 +388,7 @@ model CandidatePortfolioProject {
   interviewReadiness Int @default(0)
   portfolioReadiness Int @default(0)
   confidence     Int @default(0)
+  archivedAt    DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   profileId      String
@@ -395,6 +396,7 @@ model CandidatePortfolioProject {
   capabilityLinks CandidateCapabilityProjectLink[]
 
   @@unique([profileId, name])
+  @@index([profileId, archivedAt])
 }
 
 model CandidateResumeEvidence {

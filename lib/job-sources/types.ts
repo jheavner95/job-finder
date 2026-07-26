@@ -44,10 +44,17 @@ export const DEFAULT_PRODUCT_DESIGN_SEARCH: JobSearchCriteria = {
     "Staff Product Designer",
     "Director Product Design",
   ],
-  locations: ["Remote", "Hybrid", "United States", "Kansas City"],
+  locations: ["Remote", "Hybrid", "United States"],
   remote: true,
   hybrid: true,
   country: "United States",
+};
+
+export const EMPTY_JOB_SEARCH: JobSearchCriteria = {
+  titles: [],
+  locations: [],
+  remote: true,
+  hybrid: true,
 };
 
 export type CrawlSummary = {

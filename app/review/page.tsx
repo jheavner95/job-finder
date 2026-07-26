@@ -31,7 +31,7 @@ export default async function ReviewPage({
     <div className="page">
       <PageHeader
         title="Review queue"
-        subtitle="Imported and sample opportunities compared with your saved career profile."
+        subtitle="Imported opportunities compared with your saved career profile."
       />
       <div className="queue-tools">
         <div className="filter-tabs" role="group" aria-label="Filter jobs by status">
@@ -64,7 +64,7 @@ export default async function ReviewPage({
           {filtered.map((job) => <JobRow key={job.id} job={job} />)}
         </div>
       ) : (
-        <div className="empty-state"><strong>No jobs found</strong><p>Try a broader filter or search term.</p></div>
+        <div className="empty-state"><strong>{jobs.length ? "No jobs found" : "No opportunities are waiting for review."}</strong><p>{jobs.length ? "Try a broader filter or search term." : "Newly imported opportunities will appear here."}</p></div>
       )}
     </div>
   );

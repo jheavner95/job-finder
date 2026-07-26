@@ -1,7 +1,5 @@
 # Job Finder
 
-![Dashboard](docs/screenshots/dashboard.png)
-
 A desktop-first career intelligence application that automatically discovers
 opportunities from multiple ATS providers, evaluates them using deterministic
 scoring, and helps candidates prepare stronger applications through explainable
@@ -92,7 +90,6 @@ cp .env.example .env
 cp context/example/*.md context/
 npm run db:generate
 npm run db:migrate
-npm run db:seed
 npm run local:start
 ```
 
@@ -102,9 +99,9 @@ Open the local application with:
 npm run local:open
 ```
 
-The seed contains synthetic demonstration opportunities only. Replace the
-example context files through the onboarding flow or with your own verified
-local source material. Never commit those populated files.
+The database starts empty. Replace the example context files through the
+onboarding flow or with your own verified local source material. Never commit
+populated context files.
 
 ## Development
 
@@ -121,6 +118,9 @@ Additional local commands:
 npm run local:stop
 npm run db:backup
 npm run db:restore -- path/to/private-backup.db
+npm run data:audit
+npm run data:cleanup -- --dry-run
+npm run data:cleanup -- --apply
 ```
 
 The application binds to `127.0.0.1` by default. SQLite data and backups remain

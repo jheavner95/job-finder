@@ -3,6 +3,8 @@ import { completeCandidateEvidence } from "@/lib/candidate-intelligence/evidence
 import { EVIDENCE_QUALITY } from "@/lib/candidate-intelligence/readiness";
 import { prisma } from "@/lib/db";
 
+import { restoreArchivedProject } from "./actions";
+
 export const dynamic = "force-dynamic";
 
 function strings(value: unknown) {
@@ -37,6 +39,8 @@ export default async function EvidencePage() {
     },
   });
   const readiness = profile.resumeReadiness;
+  const activePortfolio = profile.portfolio.filter((project) => !project.archivedAt);
+  const archivedPortfolio = profile.portfolio.filter((project) => project.archivedAt);
   const grouped = Object.groupBy(profile.evidence, (item) => item.category);
   const distribution = readiness?.evidenceDistribution
     && typeof readiness.evidenceDistribution === "object"
@@ -50,6 +54,13 @@ export default async function EvidencePage() {
         title="Career Evidence"
         subtitle="Browse structured career claims and answer one question: where is the proof?"
       />
+
+      {!profile.evidence.length && !profile.resumeEvidence.length && !activePortfolio.length && (
+        <div className="empty-state">
+          <strong>No career evidence has been added.</strong>
+          <p>Import and approve a resume, or add an optional portfolio project, to begin.</p>
+        </div>
+      )}
 
       <section className="evidence-readiness">
         <div><p className="eyebrow">Resume readiness</p><h2>Current coverage</h2><p>{profile.resumeEvidence.length ? `${profile.resumeEvidence.length} verified employment records imported.` : "No verified master resume has been supplied. Coverage remains zero rather than inferred."}</p></div>
@@ -86,7 +97,7 @@ export default async function EvidencePage() {
                 <small>{item.sourceDocument}</small>
                 <dl>
                   <div><dt>Resume proof</dt><dd>{item.resumeLinks.length ? item.resumeLinks.map((link) => `${link.resumeEvidence.employer}: ${link.resumeEvidence.title}`).join(", ") : "None"}</dd></div>
-                  <div><dt>Portfolio proof</dt><dd>{item.projectLinks.length ? item.projectLinks.map((link) => link.project.name).join(", ") : "None"}</dd></div>
+                  <div><dt>Portfolio proof</dt><dd>{item.projectLinks.some((link) => !link.project.archivedAt) ? item.projectLinks.filter((link) => !link.project.archivedAt).map((link) => link.project.name).join(", ") : "None"}</dd></div>
                 </dl>
               </article>
             ))}
@@ -97,7 +108,7 @@ export default async function EvidencePage() {
       <section className="evidence-section">
         <div className="evidence-heading"><div><p className="eyebrow">Portfolio evidence</p><h2>Project readiness</h2></div><p>Unknown fields reduce readiness and are never filled through inference.</p></div>
         <div className="portfolio-evidence-list">
-          {profile.portfolio.map((project) => (
+          {activePortfolio.map((project) => (
             <article key={project.id}>
               <header><div><h3>{project.name}</h3><span>{project.evidenceQuality} evidence</span></div><strong>{project.portfolioReadiness}% ready</strong></header>
               <div className="project-readiness">
@@ -134,8 +145,26 @@ export default async function EvidencePage() {
               </details>
             </article>
           ))}
+          {!activePortfolio.length && <div className="briefing-empty"><strong>No active portfolio projects.</strong><p>Add projects during onboarding or restore an archived project below.</p></div>}
         </div>
       </section>
+
+      {archivedPortfolio.length > 0 && (
+        <section className="evidence-section">
+          <div className="evidence-heading"><div><p className="eyebrow">Recoverable projects</p><h2>Archived portfolio projects</h2></div><p>Archived projects do not affect readiness or recommendations.</p></div>
+          <div className="archived-evidence-list">
+            {archivedPortfolio.map((project) => (
+              <article key={project.id}>
+                <div><h3>{project.name}</h3><p>{project.evidenceQuality} evidence · {project.portfolioReadiness}% ready when archived</p></div>
+                <form action={restoreArchivedProject}>
+                  <input type="hidden" name="projectId" value={project.id} />
+                  <button type="submit">Restore project</button>
+                </form>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="evidence-section">
         <div className="evidence-heading"><div><p className="eyebrow">Resume evidence</p><h2>Verified employment records</h2></div></div>

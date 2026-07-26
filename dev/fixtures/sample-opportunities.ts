@@ -1,4 +1,4 @@
-import type { CategoryInput, JobFixture, ScoreCategory } from "./types";
+import type { CategoryInput, JobFixture, ScoreCategory } from "../../lib/types";
 
 const reasons: Record<ScoreCategory, string> = {
   roleFit: "The work centers on complex product workflows and end-to-end ownership.",

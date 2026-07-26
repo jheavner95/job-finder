@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SYNTHETIC_JOBS } from "../lib/sample-opportunities";
+import { SYNTHETIC_JOBS } from "../dev/fixtures/sample-opportunities";
 import { DEFAULT_SCORING_CONFIG, scoreJob } from "../lib/scoring";
 import type { CategoryInput } from "../lib/types";
 

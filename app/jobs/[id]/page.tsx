@@ -90,7 +90,7 @@ export default async function JobDetailPage({
         <div><small>Source</small><strong>{job.source}</strong></div>
         <div><small>Match confidence</small><strong>{job.confidence}%</strong></div>
         <div><small>Eligibility</small><strong>{job.eligibility === "excluded" ? "Hard requirement conflict" : "No hard conflict found"}</strong></div>
-        <div><small>Record type</small><strong>{job.isSynthetic ? "Sample opportunity" : "Imported opportunity"}</strong></div>
+        <div><small>Record type</small><strong>Imported opportunity</strong></div>
       </div>
       <div className="detail-layout">
         <div className="detail-content">
@@ -173,7 +173,7 @@ export default async function JobDetailPage({
             <p className="eyebrow">Original job description</p>
             <h2>Preserved source text</h2>
             <p>{job.description}</p>
-            <p className="source-caption">Original listing · {job.isSynthetic ? "Sample opportunity" : "Imported opportunity"}</p>
+            <p className="source-caption">Original listing · Imported opportunity</p>
           </section>
           <section>
             <p className="eyebrow">Role requirements</p>

@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-
 import { PageHeader } from "@/app/components/PageHeader";
 import { prisma } from "@/lib/db";
 import { parsedExperienceFromStored } from "@/lib/candidate-intelligence/resume-structure";
@@ -10,8 +8,9 @@ import { OnboardingWizard } from "./OnboardingWizard";
 export const dynamic = "force-dynamic";
 
 export default async function GettingStartedPage() {
+  await ensureOnboarding(prisma);
   const state = await getOnboardingState(prisma);
-  if (!state) redirect("/context");
+  if (!state) throw new Error("Candidate workspace could not be initialized.");
   const onboarding = state.onboarding ?? await ensureOnboarding(prisma);
   const latestImport = state.resumeImports[0];
   const projectProgress = new Map(state.projectProgress.map((item) => [item.projectId, item]));
@@ -64,8 +63,16 @@ export default async function GettingStartedPage() {
             status: progress?.status ?? "Needs evidence",
             notes: progress?.notes ?? "",
             screenshotName: progress?.screenshotName ?? "",
+            hasEvidence: project.evidenceQuality !== "Unknown"
+              || project.portfolioReadiness > 0
+              || project.capabilityLinks.length > 0,
           };
         })}
+        archivedProjects={state.archivedPortfolio.map((project) => ({
+          id: project.id,
+          name: project.name,
+          readiness: project.portfolioReadiness,
+        }))}
         preferences={{
           preferredRoles: strings(preferences?.preferredRoles).join(", "),
           preferredIndustries: strings(preferences?.preferredIndustries).join(", "),

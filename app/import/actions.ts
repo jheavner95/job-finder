@@ -14,6 +14,8 @@ import {
   findDuplicateJob,
   importJobPreview,
 } from "@/lib/job-import-service";
+import { mapError, type AppError } from "@/lib/errors/app-error";
+import { logAppError } from "@/lib/errors/logger";
 
 export type ImportPreviewState = {
   values?: Partial<JobImportInput>;
@@ -24,6 +26,7 @@ export type ImportPreviewState = {
     title: string;
     company: string;
   } | null;
+  actionError?: AppError;
 };
 
 function valuesFrom(formData: FormData) {
@@ -46,22 +49,28 @@ export async function previewJobAction(
       errors: parsed.error.flatten().fieldErrors,
     };
   }
-  const preview = createJobImportPreview(parsed.data);
-  const duplicate = await findDuplicateJob(
-    prisma,
-    preview.normalized.fingerprint,
-  );
-  return {
-    values: parsed.data,
-    preview,
-    duplicate: duplicate
-      ? {
-          id: duplicate.id,
-          title: duplicate.title,
-          company: duplicate.company.name,
-        }
-      : null,
-  };
+  try {
+    const preview = createJobImportPreview(parsed.data);
+    const duplicate = await findDuplicateJob(
+      prisma,
+      preview.normalized.fingerprint,
+    );
+    return {
+      values: parsed.data,
+      preview,
+      duplicate: duplicate
+        ? {
+            id: duplicate.id,
+            title: duplicate.title,
+            company: duplicate.company.name,
+          }
+        : null,
+    };
+  } catch (cause) {
+    const error = mapError(cause, { route: "/import", operation: "preview-job" });
+    await logAppError(error, cause, { operation: "preview-job", route: "/import" });
+    return { values: parsed.data, actionError: error };
+  }
 }
 
 export async function importJobAction(formData: FormData) {
@@ -69,10 +78,17 @@ export async function importJobAction(formData: FormData) {
   if (!parsed.success) {
     throw new Error("The import changed after preview. Preview it again.");
   }
-  const result = await importJobPreview(
-    prisma,
-    createJobImportPreview(parsed.data),
-  );
+  let result;
+  try {
+    result = await importJobPreview(
+      prisma,
+      createJobImportPreview(parsed.data),
+    );
+  } catch (cause) {
+    const error = mapError(cause, { route: "/import", operation: "import-job" });
+    await logAppError(error, cause, { operation: "import-job", route: "/import" });
+    throw new Error(`${error.code}:${error.diagnosticId}`);
+  }
   revalidatePath("/");
   revalidatePath("/review");
   revalidatePath(`/jobs/${result.jobId}`);

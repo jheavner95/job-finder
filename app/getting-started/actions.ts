@@ -4,7 +4,16 @@ import { revalidatePath } from "next/cache";
 
 import { ensureOpportunityIntelligence } from "@/lib/candidate-intelligence/service";
 import { extractResumeFileText } from "@/lib/candidate-intelligence/resume-file";
+import {
+  addPortfolioProject,
+  archivePortfolioProjects,
+  removePortfolioProjects,
+  removeUnstartedPortfolioProjects,
+  restorePortfolioProjects,
+} from "@/lib/candidate-intelligence/portfolio-projects";
 import { prisma } from "@/lib/db";
+import { createAppError, mapError, type ActionResult } from "@/lib/errors/app-error";
+import { logAppError } from "@/lib/errors/logger";
 import {
   CANDIDATE_ID,
   ensureOnboarding,
@@ -26,41 +35,100 @@ async function setStep(step: number) {
   revalidatePath("/context");
 }
 
+function refreshProjectPages() {
+  revalidatePath("/getting-started");
+  revalidatePath("/evidence");
+  revalidatePath("/");
+  revalidatePath("/briefing");
+  revalidatePath("/review");
+}
+
+export async function addOnboardingProject(name: string) {
+  await addPortfolioProject(prisma, name);
+  refreshProjectPages();
+}
+
+export async function archiveOnboardingProjects(projectIds: string[]) {
+  const result = await archivePortfolioProjects(prisma, projectIds);
+  refreshProjectPages();
+  return result;
+}
+
+export async function restoreOnboardingProjects(projectIds: string[]) {
+  const result = await restorePortfolioProjects(prisma, projectIds);
+  refreshProjectPages();
+  return result;
+}
+
+export async function removeOnboardingProjects(projectIds: string[]) {
+  const result = await removePortfolioProjects(prisma, projectIds);
+  refreshProjectPages();
+  return result;
+}
+
+export async function removeAllUnstartedOnboardingProjects() {
+  const result = await removeUnstartedPortfolioProjects(prisma);
+  refreshProjectPages();
+  return result;
+}
+
 export async function goToOnboardingStep(step: number) {
   if (!Number.isInteger(step) || step < 1 || step > 5) throw new Error("Invalid onboarding step.");
   await setStep(step);
 }
 
-export async function uploadResume(formData: FormData) {
-  await ensureOnboarding(prisma);
+export async function uploadResume(formData: FormData): Promise<ActionResult<{
+  id: string;
+  fileName: string;
+  sourceText: string;
+  records: ReturnType<typeof parseResumeText>["experience"];
+  sectionsNeedingReview: number;
+}>> {
   const file = formData.get("resume");
-  if (!(file instanceof File) || file.size === 0) throw new Error("Choose a resume file first.");
-  if (file.size > 10 * 1024 * 1024) throw new Error("Resume files must be 10 MB or smaller.");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: createAppError("VALIDATION_ERROR", { field: "resume" }) };
+  }
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
   if (!["pdf", "docx", "md", "txt"].includes(extension)) {
-    throw new Error("Choose a PDF, DOCX, Markdown, or TXT file.");
+    return { ok: false, error: createAppError("FILE_FORMAT_UNSUPPORTED", { fileType: extension || "unknown" }) };
   }
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const sourceText = (await extractResumeFileText(file.name, bytes)).trim();
-  if (!sourceText) throw new Error("No readable text was found in this file.");
-  const parsed = parseResumeText(sourceText);
-  const resumeImport = await prisma.candidateResumeImport.create({
-    data: {
-      profileId: CANDIDATE_ID,
-      fileName: file.name,
-      fileType: extension.toUpperCase(),
-      sourceText,
-      parsedEvidence: parsed,
-    },
-  });
-  await setStep(2);
-  return {
-    id: resumeImport.id,
-    fileName: resumeImport.fileName,
-    sourceText,
-    records: parsed.experience,
-    sectionsNeedingReview: parsed.unclassifiedSections.length,
-  };
+  if (file.size > 10 * 1024 * 1024) {
+    return { ok: false, error: createAppError("FILE_IMPORT_ERROR", { reason: "File exceeds the 10 MB local limit" }) };
+  }
+  try {
+    await ensureOnboarding(prisma);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const sourceText = (await extractResumeFileText(file.name, bytes)).trim();
+    if (!sourceText) {
+      return { ok: false, error: createAppError(extension === "pdf" ? "PDF_PARSE_ERROR" : extension === "docx" ? "DOCX_PARSE_ERROR" : "FILE_IMPORT_ERROR", { fileType: extension }) };
+    }
+    const parsed = parseResumeText(sourceText);
+    const resumeImport = await prisma.candidateResumeImport.create({
+      data: {
+        profileId: CANDIDATE_ID,
+        fileName: file.name,
+        fileType: extension.toUpperCase(),
+        sourceText,
+        parsedEvidence: parsed,
+      },
+    });
+    await setStep(2);
+    return {
+      ok: true,
+      data: {
+        id: resumeImport.id,
+        fileName: resumeImport.fileName,
+        sourceText,
+        records: parsed.experience,
+        sectionsNeedingReview: parsed.unclassifiedSections.length,
+      },
+    };
+  } catch (cause) {
+    const code = extension === "pdf" ? "PDF_PARSE_ERROR" : extension === "docx" ? "DOCX_PARSE_ERROR" : undefined;
+    const error = code ? createAppError(code, { fileType: extension }) : mapError(cause, { route: "/getting-started", operation: "resume-import" });
+    await logAppError(error, cause, { operation: "resume-import", route: "/getting-started" });
+    return { ok: false, error };
+  }
 }
 
 export async function rerunResumeExtraction(importId: string) {

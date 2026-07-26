@@ -39,14 +39,19 @@ export async function getOnboardingState(database: PrismaClient) {
       resumeImports: { orderBy: { createdAt: "desc" }, take: 10 },
       resumeEvidence: { orderBy: { startDate: "desc" } },
       resumeReadiness: true,
-      portfolio: { orderBy: { name: "asc" } },
+      portfolio: {
+        include: { capabilityLinks: true },
+        orderBy: { name: "asc" },
+      },
       careerPreferences: true,
       projectProgress: true,
     },
   });
   if (!profile) return null;
-  const portfolioReadiness = profile.portfolio.length
-    ? Math.round(profile.portfolio.reduce((sum, item) => sum + item.portfolioReadiness, 0) / profile.portfolio.length)
+  const activePortfolio = profile.portfolio.filter((item) => !item.archivedAt);
+  const archivedPortfolio = profile.portfolio.filter((item) => item.archivedAt);
+  const portfolioReadiness = activePortfolio.length
+    ? Math.round(activePortfolio.reduce((sum, item) => sum + item.portfolioReadiness, 0) / activePortfolio.length)
     : 0;
   const preferencesComplete = Boolean(
     profile.careerPreferences
@@ -67,6 +72,8 @@ export async function getOnboardingState(database: PrismaClient) {
   });
   return {
     ...profile,
+    portfolio: activePortfolio,
+    archivedPortfolio,
     portfolioReadiness,
     preferencesComplete,
     readiness,
@@ -80,8 +87,18 @@ export async function getOnboardingState(database: PrismaClient) {
 }
 
 export async function ensureOnboarding(database: PrismaClient) {
-  const state = await getOnboardingState(database);
-  if (!state) throw new Error("Candidate profile is not initialized.");
+  let state = await getOnboardingState(database);
+  if (!state) {
+    await database.candidateProfile.create({
+      data: {
+        id: CANDIDATE_ID,
+        displayName: "Candidate",
+        headline: "Profile not configured",
+      },
+    });
+    state = await getOnboardingState(database);
+  }
+  if (!state) throw new Error("Candidate workspace could not be initialized.");
   if (state.onboarding) return state.onboarding;
   return database.candidateOnboarding.create({
     data: {
@@ -104,7 +121,11 @@ export async function recalculateResumeEvidence(database: PrismaClient) {
   const [capabilities, resume] = await Promise.all([
     database.candidateIntelligenceEvidence.findMany({
       where: { profileId: CANDIDATE_ID },
-      include: { projectLinks: true },
+      include: {
+        projectLinks: {
+          where: { project: { archivedAt: null } },
+        },
+      },
     }),
     database.candidateResumeEvidence.findMany({
       where: { profileId: CANDIDATE_ID },
@@ -150,7 +171,12 @@ export async function recalculateResumeEvidence(database: PrismaClient) {
   }
   const refreshed = await database.candidateIntelligenceEvidence.findMany({
     where: { profileId: CANDIDATE_ID },
-    include: { resumeLinks: true, projectLinks: true },
+    include: {
+      resumeLinks: true,
+      projectLinks: {
+        where: { project: { archivedAt: null } },
+      },
+    },
   });
   const categories = (category: string) => refreshed.filter((item) => item.category === category);
   const resumeLinked = refreshed.filter((item) => item.resumeLinks.length);

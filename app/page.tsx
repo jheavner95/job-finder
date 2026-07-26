@@ -34,9 +34,6 @@ export default async function DashboardPage() {
     { label: "Saved opportunities", value: briefing.saved },
     { label: "Recently closed", value: briefing.recentlyClosed },
   ].filter((item) => item.value > 0);
-  const syntheticCount = summary.jobs.filter((job) => job.isSynthetic).length;
-  const importedCount = summary.jobs.length - syntheticCount;
-
   return (
     <div className="page briefing-page">
       <header className="briefing-header">
@@ -101,12 +98,12 @@ export default async function DashboardPage() {
           <div className="briefing-empty">
             <strong>
               {briefing.totalJobs === 0
-                ? "No opportunities have been added."
+                ? "No opportunities yet."
                 : "No high-priority opportunities are waiting."}
             </strong>
             <p>
               {briefing.totalJobs === 0
-                ? "This workspace will remain quiet until you add records intentionally."
+                ? "Set up a job source, import an opportunity, or complete your profile to get started."
                 : "Reviewed roles remain available in the Review Queue."}
             </p>
           </div>
@@ -174,11 +171,13 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      <p className="synthetic-note briefing-disclosure">
-        {importedCount > 0
-          ? `${importedCount} manually imported ${importedCount === 1 ? "opportunity is" : "opportunities are"} stored alongside ${syntheticCount} sample ${syntheticCount === 1 ? "opportunity" : "opportunities"}.`
-          : "Current opportunities are sample records."} No outside job search has run.
-      </p>
+      {briefing.totalJobs === 0 && (
+        <div className="empty-state-actions">
+          <Link className="primary-button button-link" href="/sources">Set up job sources</Link>
+          <Link className="secondary-button button-link" href="/import">Import a job</Link>
+          <Link className="text-button" href="/getting-started">Complete your profile →</Link>
+        </div>
+      )}
     </div>
   );
 }

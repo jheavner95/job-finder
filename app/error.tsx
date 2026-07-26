@@ -1,6 +1,10 @@
 "use client";
 
+import { ErrorNotice } from "@/app/components/ErrorNotice";
+import { mapError } from "@/lib/errors/app-error";
+
 export default function AppError({
+  error,
   reset,
 }: {
   error: Error & { digest?: string };
@@ -8,11 +12,7 @@ export default function AppError({
 }) {
   return (
     <div className="page">
-      <div className="empty-state" role="alert">
-        <strong>We couldn’t load this workspace.</strong>
-        <p>Confirm the SQLite database is available, then try again.</p>
-        <button className="primary-button" onClick={reset}>Try again</button>
-      </div>
+      <ErrorNotice error={mapError(error, { route: "workspace", digest: error.digest })} retry={reset} />
     </div>
   );
 }

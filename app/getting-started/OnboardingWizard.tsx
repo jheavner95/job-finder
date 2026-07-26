@@ -1,13 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 
+import { ErrorNotice } from "@/app/components/ErrorNotice";
+import { createAppError, mapError, type AppError } from "@/lib/errors/app-error";
 import {
+  addOnboardingProject,
   approveResumeExperience,
+  archiveOnboardingProjects,
   completeOnboarding,
   goToOnboardingStep,
+  removeAllUnstartedOnboardingProjects,
+  removeOnboardingProjects,
   rerunResumeExtraction,
+  restoreOnboardingProjects,
   savePreferences,
   saveProjectProgress,
   uploadResume,
@@ -69,16 +77,21 @@ export function OnboardingWizard(props: {
   currentReadiness: number;
   latestImport: ImportPreview | null;
   importHistory: Array<{ id: string; fileName: string; fileType: string; status: string; createdAt: string }>;
-  projects: Array<{ id: string; name: string; readiness: number; status: string; notes: string; screenshotName: string }>;
+  projects: Array<{ id: string; name: string; readiness: number; status: string; notes: string; screenshotName: string; hasEvidence: boolean }>;
+  archivedProjects: Array<{ id: string; name: string; readiness: number }>;
   preferences: Record<string, string>;
   resumeCount: number;
   capabilityCoverage: number;
 }) {
+  const router = useRouter();
   const [step, setStep] = useState(props.initialStep);
   const [preview, setPreview] = useState<ImportPreview | null>(props.latestImport);
   const [records, setRecords] = useState<ExperienceRecord[]>(normalizeRecords(props.latestImport?.records ?? []));
-  const [error, setError] = useState("");
+  const [error, setError] = useState<AppError | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [managingProjects, setManagingProjects] = useState(false);
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [newProjectName, setNewProjectName] = useState("");
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -94,13 +107,13 @@ export function OnboardingWizard(props: {
     + (preview?.sectionsNeedingReview ?? 0);
 
   const go = (next: number) => {
-    setError("");
+    setError(null);
     setStep(next);
     startTransition(async () => {
       try {
         await goToOnboardingStep(next);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Could not update onboarding.");
+        setError(mapError(cause, { route: "/getting-started", operation: "change-step" }));
       }
     });
   };
@@ -109,16 +122,17 @@ export function OnboardingWizard(props: {
     if (!file) return;
     const data = new FormData();
     data.set("resume", file);
-    setError("");
+    setError(null);
     startTransition(async () => {
       try {
         const result = await uploadResume(data);
-        const nextPreview = { ...result, fileType: file.name.split(".").pop()?.toUpperCase(), status: "Preview" };
+        if (!result.ok) return setError(result.error);
+        const nextPreview = { ...result.data, fileType: file.name.split(".").pop()?.toUpperCase(), status: "Preview" };
         setPreview(nextPreview);
-        setRecords(normalizeRecords(result.records));
+        setRecords(normalizeRecords(result.data.records));
         setStep(2);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Resume parsing failed.");
+        setError(mapError(cause, { route: "/getting-started", operation: "resume-import" }));
       }
     });
   };
@@ -141,21 +155,21 @@ export function OnboardingWizard(props: {
   };
 
   const submitExperience = () => {
-    if (!preview) return setError("Import a resume before reviewing experience.");
-    setError("");
+    if (!preview) return setError(createAppError("VALIDATION_ERROR", { field: "resume" }));
+    setError(null);
     startTransition(async () => {
       try {
         await approveResumeExperience(preview.id, JSON.stringify(records));
         setStep(3);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Experience could not be saved.");
+        setError(mapError(cause, { route: "/getting-started", operation: "approve-experience" }));
       }
     });
   };
 
   const rerunExtraction = () => {
     if (!preview) return;
-    setError("");
+    setError(null);
     startTransition(async () => {
       try {
         const result = await rerunResumeExtraction(preview.id);
@@ -163,7 +177,7 @@ export function OnboardingWizard(props: {
         setRecords(normalizeRecords(result.records));
         setStep(2);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Extraction could not be re-run.");
+        setError(mapError(cause, { route: "/getting-started", operation: "resume-extraction" }));
       }
     });
   };
@@ -172,9 +186,66 @@ export function OnboardingWizard(props: {
     try {
       await completeOnboarding();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Onboarding could not be completed.");
+      setError(mapError(cause, { route: "/getting-started", operation: "complete-onboarding" }));
     }
   });
+
+  const refreshProjects = () => {
+    setSelectedProjects([]);
+    router.refresh();
+  };
+
+  const addProject = () => {
+    if (!newProjectName.trim()) return setError(createAppError("VALIDATION_ERROR", { field: "project name" }));
+    setError(null);
+    startTransition(async () => {
+      try {
+        await addOnboardingProject(newProjectName);
+        setNewProjectName("");
+        refreshProjects();
+      } catch (cause) {
+        setError(mapError(cause, { route: "/getting-started", operation: "add-project" }));
+      }
+    });
+  };
+
+  const archiveProjects = (ids: string[]) => {
+    if (!ids.length || !window.confirm(
+      `Archive ${ids.length === 1 ? "this project" : `${ids.length} selected projects`}? Archived projects remain recoverable in Career Evidence.`,
+    )) return;
+    startTransition(async () => {
+      await archiveOnboardingProjects(ids);
+      refreshProjects();
+    });
+  };
+
+  const removeProjects = (ids: string[], hasEvidence = false) => {
+    if (!ids.length || !window.confirm(
+      hasEvidence
+        ? "Permanently remove this project and its linked evidence? Choose Archive if you may want to restore it later."
+        : `Permanently remove ${ids.length === 1 ? "this project" : `${ids.length} selected projects`}? This cannot be undone.`,
+    )) return;
+    startTransition(async () => {
+      await removeOnboardingProjects(ids);
+      refreshProjects();
+    });
+  };
+
+  const restoreProjects = (ids: string[]) => {
+    if (!ids.length) return;
+    startTransition(async () => {
+      await restoreOnboardingProjects(ids);
+      refreshProjects();
+    });
+  };
+
+  const removeUnstarted = () => {
+    if (!window.confirm("Remove every active project with 0% readiness? This cannot be undone.")) return;
+    startTransition(async () => {
+      await removeAllUnstartedOnboardingProjects();
+      refreshProjects();
+    });
+  };
 
   return (
     <div className="onboarding-shell">
@@ -203,7 +274,7 @@ export function OnboardingWizard(props: {
           <b>{progress}%</b>
         </header>
 
-        {error && <div className="wizard-error" role="alert">{error}</div>}
+        {error && <ErrorNotice error={error} level="inline" />}
 
         {step === 1 && (
           <div className="wizard-step">
@@ -301,11 +372,77 @@ export function OnboardingWizard(props: {
           <div className="wizard-step">
             <p className="eyebrow">One project at a time</p>
             <h2>Build portfolio evidence</h2>
-            <p className="wizard-lead">Projects are optional during onboarding. Add notes or a screenshot now, or mark them for later evidence review.</p>
-            <div className="onboarding-projects">
-              {props.projects.map((project) => <ProjectCard key={project.id} project={project} />)}
+            <p className="wizard-lead">Add only the projects you want Job Finder to use as career evidence. Portfolio evidence is optional during onboarding.</p>
+            <div className="project-toolbar">
+              <div className="add-project-control">
+                <label htmlFor="new-project-name">Project name</label>
+                <input id="new-project-name" value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="Add a verified project" />
+                <button className="secondary-button" type="button" disabled={isPending} onClick={addProject}>Add project</button>
+              </div>
+              <button type="button" onClick={() => setManagingProjects((value) => !value)}>
+                {managingProjects ? "Cancel management" : "Manage projects"}
+              </button>
             </div>
-            <div className="wizard-actions"><button type="button" onClick={() => go(2)}>Back</button><button className="primary-button" type="button" onClick={() => go(4)}>Continue with {completedProjects} completed</button></div>
+            {managingProjects && (
+              <section className="project-manager" aria-label="Manage portfolio projects">
+                <header><strong>Select projects</strong><span>{selectedProjects.length} selected</span></header>
+                <div>
+                  {props.projects.map((project) => (
+                    <label key={project.id}>
+                      <input
+                        type="checkbox"
+                        checked={selectedProjects.includes(project.id)}
+                        onChange={(event) => setSelectedProjects((current) =>
+                          event.target.checked
+                            ? [...current, project.id]
+                            : current.filter((id) => id !== project.id))}
+                      />
+                      <span>{project.name}</span><small>{project.readiness}% ready</small>
+                    </label>
+                  ))}
+                </div>
+                <footer>
+                  <button type="button" disabled={!selectedProjects.length || isPending} onClick={() => archiveProjects(selectedProjects)}>Archive selected</button>
+                  <button type="button" disabled={!selectedProjects.length || isPending} onClick={() => removeProjects(
+                    selectedProjects,
+                    props.projects.some((project) =>
+                      selectedProjects.includes(project.id) && project.hasEvidence),
+                  )}>Remove selected</button>
+                  <button type="button" disabled={isPending || !props.projects.some((project) => project.readiness === 0)} onClick={removeUnstarted}>Remove all 0% ready</button>
+                  <button type="button" onClick={() => { setManagingProjects(false); setSelectedProjects([]); }}>Cancel</button>
+                </footer>
+              </section>
+            )}
+            {props.archivedProjects.length > 0 && (
+              <details className="archived-projects">
+                <summary>Restore archived projects ({props.archivedProjects.length})</summary>
+                {props.archivedProjects.map((project) => (
+                  <div key={project.id}>
+                    <span><strong>{project.name}</strong><small>{project.readiness}% ready when archived</small></span>
+                    <button type="button" disabled={isPending} onClick={() => restoreProjects([project.id])}>Restore</button>
+                  </div>
+                ))}
+              </details>
+            )}
+            {props.projects.length ? (
+              <div className="onboarding-projects">
+                {props.projects.map((project) => (
+                  <ProjectCard
+                    key={project.id}
+                    project={project}
+                    onArchive={() => archiveProjects([project.id])}
+                    onRemove={() => removeProjects([project.id], project.hasEvidence)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="wizard-empty portfolio-empty">
+                <strong>No portfolio projects added yet.</strong>
+                <p>Add a project above, or continue without portfolio evidence.</p>
+                <button className="primary-button" type="button" onClick={() => go(4)}>Continue without portfolio evidence</button>
+              </div>
+            )}
+            <div className="wizard-actions"><button type="button" onClick={() => go(2)}>Back</button><button className="primary-button" type="button" onClick={() => go(4)}>{props.projects.length ? `Continue with ${completedProjects} completed` : "Continue without portfolio evidence"}</button></div>
           </div>
         )}
 
@@ -353,8 +490,10 @@ export function OnboardingWizard(props: {
   );
 }
 
-function ProjectCard({ project }: {
-  project: { id: string; name: string; readiness: number; status: string; notes: string; screenshotName: string };
+function ProjectCard({ project, onArchive, onRemove }: {
+  project: { id: string; name: string; readiness: number; status: string; notes: string; screenshotName: string; hasEvidence: boolean };
+  onArchive: () => void;
+  onRemove: () => void;
 }) {
   const [status, setStatus] = useState(project.status);
   const [saved, setSaved] = useState(false);
@@ -372,8 +511,10 @@ function ProjectCard({ project }: {
       <label className="screenshot-field">Optional screenshot<input type="file" name="screenshot" accept="image/png,image/jpeg,image/webp" /><small>{project.screenshotName || "No screenshot selected"}</small></label>
       <div>
         <button type="button" onClick={() => { setStatus("Complete"); setSaved(false); }}>Complete now</button>
-        <button type="button" onClick={() => { setStatus("Skipped"); setSaved(false); }}>Skip</button>
-        <button className="save-project" type="submit" disabled={isPending}>{isPending ? "Saving…" : saved ? "Saved" : "Save status"}</button>
+        <button type="button" onClick={() => { setStatus("Skipped"); setSaved(false); }}>Skip for now</button>
+        <button className="save-project" type="submit" disabled={isPending}>{isPending ? "Saving…" : saved ? "Saved" : "Save notes"}</button>
+        <button type="button" onClick={onArchive}>Archive</button>
+        <button className="remove-project" type="button" onClick={onRemove}>Remove</button>
       </div>
     </form>
   );

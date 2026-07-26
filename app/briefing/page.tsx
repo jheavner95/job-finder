@@ -79,6 +79,13 @@ export default async function DailyBriefingPage() {
         subtitle="What changed across scheduled and manual discovery in the last 24 hours."
       />
 
+      {!newJobs.length && !crawls.length && !connectors.length && reviewCount === 0 && (
+        <div className="empty-state">
+          <strong>No new activity in the last 24 hours.</strong>
+          <p>Discovery runs, imports, duplicates, and source issues will appear here.</p>
+        </div>
+      )}
+
       {attention && (
         <section className="daily-priority">
           <div>
@@ -96,12 +103,12 @@ export default async function DailyBriefingPage() {
         </section>
       )}
 
-      <section className="briefing-summary-line" aria-label="Daily discovery summary">
+      {(newJobs.length > 0 || crawls.length > 0 || connectors.length > 0 || reviewCount > 0) && <section className="briefing-summary-line" aria-label="Daily discovery summary">
         <div><strong>{newJobs.length}</strong><span>new opportunities</span></div>
         <div><strong>{duplicates}</strong><span>duplicates prevented</span></div>
         <div><strong>{failures.length}</strong><span>provider failures</span></div>
         <div><strong>{reviewCount}</strong><span>requiring review</span></div>
-      </section>
+      </section>}
 
       <div className="daily-briefing-grid">
         <section className="briefing-panel briefing-panel-wide">

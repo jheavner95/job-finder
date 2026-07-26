@@ -11,7 +11,7 @@ client decision form → validated server action → UserDecision
                                                → path revalidation
 ```
 
-The runtime UI does not import `lib/sample-opportunities.ts`. Synthetic examples are seed inputs only.
+Production runtime code never imports development or test fixtures. A fresh database starts empty.
 
 ## Data ownership
 
@@ -21,7 +21,7 @@ The runtime UI does not import `lib/sample-opportunities.ts`. Synthetic examples
 - `UserDecision` stores the user’s workflow judgment independently of evaluation data.
 - `ActivityEvent` provides an append-only history of meaningful status transitions.
 
-The displayed status is the latest user decision when one exists; otherwise it falls back to the seeded job status.
+The displayed status is the latest user decision when one exists; otherwise it falls back to the imported job status.
 
 ## Mutation design
 

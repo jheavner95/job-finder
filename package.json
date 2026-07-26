@@ -22,7 +22,9 @@
     "db:migrate": "node scripts/ensure-sqlite.mjs && prisma migrate deploy",
     "db:backup": "node scripts/sqlite-backup.mjs",
     "db:restore": "node scripts/sqlite-restore.mjs",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "data:audit": "tsx scripts/data-maintenance.ts audit",
+    "data:cleanup": "tsx scripts/data-maintenance.ts cleanup"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

@@ -180,13 +180,18 @@ export async function completeCandidateEvidence(database: PrismaClient) {
   const [capabilities, resume, completedProjects] = await Promise.all([
     database.candidateIntelligenceEvidence.findMany({
       where: { profileId: PROFILE_ID },
-      include: { projectLinks: true, resumeLinks: true },
+      include: {
+        projectLinks: {
+          where: { project: { archivedAt: null } },
+        },
+        resumeLinks: true,
+      },
     }),
     database.candidateResumeEvidence.findMany({
       where: { profileId: PROFILE_ID },
     }),
     database.candidatePortfolioProject.findMany({
-      where: { profileId: PROFILE_ID },
+      where: { profileId: PROFILE_ID, archivedAt: null },
     }),
   ]);
   const categories = (category: string) =>

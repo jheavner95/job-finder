@@ -128,6 +128,15 @@ main { min-width: 0; }
 .progress-copy { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; margin: 9px 0 20px; }
 .progress-copy strong { color: var(--ink); }
 .synthetic-note { color: var(--faint); font-size: 9px; text-align: center; margin: 28px 0 0; }
+.empty-state-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.app-error { display: grid; gap: 18px; padding: 24px; border: 1px solid #d8b9b1; border-radius: 8px; background: #fff9f7; color: var(--ink); }
+.app-error h2 { margin: 4px 0 8px; font: 500 26px var(--serif); }
+.app-error p { color: var(--muted); }
+.app-error strong { display: block; margin-top: 10px; }
+.app-error-actions { display: flex; gap: 10px; }
+.app-error details { border-top: 1px solid #ead7d2; padding-top: 12px; }
+.app-error summary { cursor: pointer; font-size: 9px; font-weight: 800; }
+.app-error pre { overflow: auto; white-space: pre-wrap; font: 10px/1.5 monospace; color: var(--muted); }
 .briefing-page { max-width: 1120px; }
 .briefing-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; margin-bottom: 55px; }
 .briefing-header h1 { margin: 7px 0 16px; font: 500 clamp(39px, 4vw, 55px)/1.02 var(--serif); letter-spacing: -.04em; }
@@ -381,6 +390,11 @@ main { min-width: 0; }
 .capability-card dt { color: var(--faint); font-size: 7px; text-transform: uppercase; letter-spacing: .06em; font-weight: 800; }
 .capability-card dd { margin: 0; color: var(--muted); font-size: 8px; line-height: 1.45; }
 .portfolio-evidence-list, .resume-evidence-list { display: grid; gap: 10px; }
+.archived-evidence-list { display: grid; gap: 8px; }
+.archived-evidence-list article { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 19px; border: 1px solid var(--line); border-radius: 7px; background: var(--white); }
+.archived-evidence-list h3 { margin: 0; font: 500 18px var(--serif); }
+.archived-evidence-list p { margin: 4px 0 0; color: var(--faint); font-size: 8px; }
+.archived-evidence-list button { min-height: 36px; padding: 0 12px; border: 1px solid var(--green); border-radius: 4px; background: white; color: var(--green); font-size: 8px; font-weight: 800; cursor: pointer; }
 .portfolio-evidence-list > article, .resume-evidence-list article { padding: 21px; border: 1px solid var(--line); border-radius: 7px; background: var(--white); }
 .portfolio-evidence-list header { display: flex; align-items: center; justify-content: space-between; gap: 25px; }
 .portfolio-evidence-list h3, .resume-evidence-list h3 { margin: 0 0 4px; font: 500 20px var(--serif); }
@@ -635,6 +649,28 @@ main { min-width: 0; }
 .wizard-empty p { color: var(--faint); font-size: 9px; }
 .wizard-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
 .wizard-actions > button:not(.primary-button) { min-height: 44px; border: 0; background: none; color: #657269; font-size: 9px; font-weight: 800; cursor: pointer; }
+.project-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
+.add-project-control { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 7px; align-items: end; }
+.add-project-control label { grid-column: 1 / -1; }
+.add-project-control .secondary-button { min-height: 42px; margin: 0; white-space: nowrap; }
+.project-toolbar > button { min-height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 5px; background: white; color: var(--green); font-size: 9px; font-weight: 800; cursor: pointer; }
+.project-manager { margin-bottom: 16px; padding: 16px; border: 1px solid #cad5cd; border-radius: 8px; background: #f5f8f5; }
+.project-manager header { display: flex; justify-content: space-between; color: var(--forest); font-size: 10px; }
+.project-manager header span { color: var(--faint); font-size: 8px; }
+.project-manager > div { display: grid; gap: 2px; margin: 12px 0; }
+.project-manager label { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border-radius: 4px; background: white; }
+.project-manager input { width: 14px; min-height: 14px; padding: 0; }
+.project-manager small { color: var(--faint); font-weight: 500; }
+.project-manager footer { display: flex; flex-wrap: wrap; gap: 8px; }
+.project-manager button, .archived-projects button { min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px; background: white; color: var(--green); font-size: 8px; font-weight: 800; cursor: pointer; }
+.project-manager button:disabled { opacity: .45; cursor: default; }
+.project-manager footer button:nth-child(2), .project-manager footer button:nth-child(3) { color: #8a443d; }
+.archived-projects { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 7px; }
+.archived-projects summary { padding: 13px 15px; color: var(--green); font-size: 9px; font-weight: 800; cursor: pointer; }
+.archived-projects > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 15px; border-top: 1px solid var(--line); }
+.archived-projects span strong, .archived-projects span small { display: block; }
+.archived-projects span strong { color: var(--forest); font-size: 10px; }
+.archived-projects span small { margin-top: 3px; color: var(--faint); font-size: 8px; }
 .onboarding-projects { display: grid; gap: 12px; }
 .onboarding-project-card { padding: 18px; border: 1px solid var(--line); border-radius: 8px; }
 .onboarding-project-card header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 14px; }
@@ -650,6 +686,8 @@ main { min-width: 0; }
 .onboarding-project-card > div:last-child { display: flex; gap: 8px; margin-top: 12px; }
 .onboarding-project-card button { min-height: 35px; padding: 0 11px; border: 1px solid #d1d6d2; border-radius: 4px; background: white; color: #5d6861; font-size: 8px; font-weight: 800; cursor: pointer; }
 .onboarding-project-card button.save-project { margin-left: auto; border-color: var(--green); color: var(--green); }
+.onboarding-project-card button.remove-project { border-color: #e2c7c3; color: #8a443d; }
+.portfolio-empty .primary-button { margin-top: 10px; }
 .preference-form { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .preference-form label:first-child, .preference-form label:nth-child(2) { grid-column: span 2; }
 .preference-form small { color: var(--faint); font-weight: 500; }
