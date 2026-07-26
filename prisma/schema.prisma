@@ -1,0 +1,499 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum JobStatus {
+  NEW
+  STRONG_MATCH
+  POSSIBLE
+  REJECTED
+  SAVED
+  APPLIED
+  INTERVIEWING
+  OFFER
+  CLOSED
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  website   String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  jobs      Job[]
+}
+
+model JobSource {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  baseUrl     String?
+  approved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  jobs        Job[]
+  searchRuns  SearchRun[]
+}
+
+model Job {
+  id                    String   @id @default(cuid())
+  sourceJobId           String?
+  fingerprint           String   @unique
+  title                 String
+  location              String?
+  remoteStatus          String?
+  employmentType        String?
+  compensationMin       Int?
+  compensationMax       Int?
+  compensationCurrency  String?
+  compensationText      String?
+  sourceUrl              String
+  originalSourceText     String
+  normalizedDescription String?
+  normalizedRequirements Json?
+  normalizedConcerns     Json?
+  postedAt               DateTime?
+  firstSeenAt            DateTime @default(now())
+  lastSeenAt             DateTime @default(now())
+  closedAt               DateTime?
+  status                 JobStatus @default(NEW)
+  isSynthetic            Boolean @default(false)
+  companyId              String
+  sourceId               String
+  company                Company @relation(fields: [companyId], references: [id])
+  source                 JobSource @relation(fields: [sourceId], references: [id])
+  evaluations            JobEvaluation[]
+  decisions              UserDecision[]
+  applications           Application[]
+  activity               ActivityEvent[]
+  intelligence           OpportunityIntelligence?
+  searchRuns             SearchRun[] @relation("JobsInSearchRun")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([status])
+  @@index([postedAt])
+}
+
+model JobEvaluation {
+  id               String   @id @default(cuid())
+  score            Int
+  reasoning        Json
+  categoryResults  Json
+  scoringVersion   String
+  evaluatedAt      DateTime @default(now())
+  jobId            String
+  job              Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  evidence         CandidateEvidence[]
+
+  @@index([jobId, evaluatedAt])
+}
+
+model CandidateEvidence {
+  id            String   @id @default(cuid())
+  contextFile   String
+  label         String
+  excerpt       String
+  relevance     String
+  createdAt     DateTime @default(now())
+  evaluationId  String
+  evaluation    JobEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+}
+
+model UserDecision {
+  id        String   @id @default(cuid())
+  decision  JobStatus
+  reason    String?
+  decidedAt DateTime @default(now())
+  jobId     String
+  job       Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, decidedAt])
+}
+
+model Application {
+  id          String   @id @default(cuid())
+  status      JobStatus @default(APPLIED)
+  appliedAt   DateTime?
+  notes       String?
+  nextStepAt  DateTime?
+  jobId       String
+  job         Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ActivityEvent {
+  id        String   @id @default(cuid())
+  type      String
+  summary   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  jobId     String?
+  job       Job? @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model SearchRun {
+  id          String   @id @default(cuid())
+  query       Json
+  status      String
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  sourceId    String?
+  source      JobSource? @relation(fields: [sourceId], references: [id])
+  jobs        Job[] @relation("JobsInSearchRun")
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  type        String
+  periodStart DateTime
+  periodEnd   DateTime
+  title       String
+  content     Json
+  generatedAt DateTime @default(now())
+}
+
+model CompanyConnector {
+  id                  String   @id @default(cuid())
+  company             String   @unique
+  careerUrl           String
+  atsType             String
+  connectorKey        String
+  searchCriteria      Json?
+  robotsPolicy        String?
+  crawlDelay          Int?
+  rateLimit           Int?
+  enabled             Boolean  @default(true)
+  health              String   @default("Disabled")
+  lastChecked         DateTime?
+  lastSuccessfulFetch DateTime?
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  crawlRuns           ConnectorCrawl[]
+  schedule            ConnectorSchedule?
+
+  @@index([atsType, enabled])
+  @@index([health])
+}
+
+model ConnectorCrawl {
+  id            String   @id @default(cuid())
+  status        String
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  jobsDiscovered Int     @default(0)
+  jobsImported  Int      @default(0)
+  duplicates    Int      @default(0)
+  failures      Int      @default(0)
+  durationMs    Int?
+  lastError     String?
+  metadata      Json?
+  connectorId   String
+  connector     CompanyConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  batchId       String?
+  batch         DiscoveryBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([connectorId, startedAt])
+  @@index([status])
+  @@index([batchId])
+}
+
+model ConnectorSchedule {
+  id              String   @id @default(cuid())
+  scheduleType    String   @default("Manual")
+  timeOfDay       String?
+  weekday         Int?
+  intervalMinutes Int?
+  nextRunAt       DateTime?
+  lastRunAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  connectorId     String   @unique
+  connector       CompanyConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleType, nextRunAt])
+}
+
+model DiscoveryBatch {
+  id             String   @id @default(cuid())
+  trigger        String
+  status         String
+  startedAt      DateTime @default(now())
+  completedAt    DateTime?
+  durationMs     Int?
+  connectorsRun  Int      @default(0)
+  jobsDiscovered Int      @default(0)
+  jobsImported   Int      @default(0)
+  duplicates     Int      @default(0)
+  failures       Int      @default(0)
+  metadata       Json?
+  crawlRuns      ConnectorCrawl[]
+
+  @@index([startedAt])
+  @@index([status])
+}
+
+model SchedulerLock {
+  id        String   @id
+  lockToken String?
+  lockedAt  DateTime?
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String
+  title     String
+  message   String
+  href      String?
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([readAt, createdAt])
+  @@index([type])
+}
+
+model CandidateProfile {
+  id              String   @id
+  displayName     String
+  headline        String
+  yearsExperience Int?
+  sourceUpdatedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  evidence        CandidateIntelligenceEvidence[]
+  portfolio       CandidatePortfolioProject[]
+  resumeEvidence  CandidateResumeEvidence[]
+  resumeReadiness CandidateResumeReadiness?
+  onboarding       CandidateOnboarding?
+  resumeImports    CandidateResumeImport[]
+  careerPreferences CandidateCareerPreferences?
+  projectProgress  CandidateProjectProgress[]
+}
+
+model CandidateOnboarding {
+  id                 String   @id
+  currentStep        Int      @default(1)
+  highestStep        Int      @default(1)
+  startedAt          DateTime @default(now())
+  completedAt        DateTime?
+  baselineReadiness  Int      @default(0)
+  completionReadiness Int?
+  updatedAt          DateTime @updatedAt
+  profileId          String   @unique
+  profile            CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model CandidateResumeImport {
+  id             String   @id @default(cuid())
+  fileName       String
+  fileType       String
+  sourceText     String
+  parsedEvidence Json
+  status         String   @default("Preview")
+  createdAt      DateTime @default(now())
+  approvedAt     DateTime?
+  profileId      String
+  profile        CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, createdAt])
+}
+
+model CandidateCareerPreferences {
+  id                String   @id
+  preferredRoles    Json
+  preferredIndustries Json
+  workMode          String?
+  compensation      String?
+  companyExclusions Json
+  employmentTypes   Json
+  updatedAt         DateTime @updatedAt
+  profileId         String   @unique
+  profile           CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model CandidateProjectProgress {
+  id             String   @id @default(cuid())
+  status         String   @default("Needs evidence")
+  notes          String?
+  screenshotName String?
+  updatedAt      DateTime @updatedAt
+  profileId      String
+  profile        CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  projectId      String
+
+  @@unique([profileId, projectId])
+  @@index([profileId, status])
+}
+
+model CandidateIntelligenceEvidence {
+  id             String   @id
+  category       String
+  label          String
+  sourceDocument String
+  sourceExcerpt  String
+  keywords       Json
+  confidence     String
+  evidenceQuality String @default("Unknown")
+  projectName    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  profileId      String
+  profile        CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  projectLinks   CandidateCapabilityProjectLink[]
+  resumeLinks    CandidateCapabilityResumeLink[]
+
+  @@index([profileId, category])
+  @@index([label])
+}
+
+model CandidatePortfolioProject {
+  id             String   @id
+  name           String
+  evidenceStatus String
+  sourceDocument String
+  sourceExcerpt  String
+  employer       String?
+  timeframe      String?
+  role           String?
+  responsibilities Json?
+  problem        String?
+  solution       String?
+  businessOutcome String?
+  designOutcome  String?
+  researchPerformed String?
+  leadershipDemonstrated String?
+  crossFunctionalPartners Json?
+  industry       String?
+  productType    String?
+  platform       String?
+  enterpriseScale String?
+  designSystemUsage String?
+  accessibilityWork String?
+  aiUsage        String?
+  artifactsAvailable Json?
+  confidentiality String?
+  evidenceQuality String @default("Unknown")
+  documentationCompleteness Int @default(0)
+  visualEvidenceReadiness Int @default(0)
+  outcomeEvidenceReadiness Int @default(0)
+  interviewReadiness Int @default(0)
+  portfolioReadiness Int @default(0)
+  confidence     Int @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  profileId      String
+  profile        CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  capabilityLinks CandidateCapabilityProjectLink[]
+
+  @@unique([profileId, name])
+}
+
+model CandidateResumeEvidence {
+  id                 String   @id @default(cuid())
+  employer           String
+  title              String
+  startDate          String?
+  endDate            String?
+  responsibilities   Json
+  leadership         Json
+  domains            Json
+  industries         Json
+  products           Json
+  technologies       Json
+  methods            Json
+  collaboration      Json
+  research           Json
+  accessibility      Json
+  ai                  Json
+  designSystems      Json
+  enterprise         Json
+  sourceDocument     String
+  sourceExcerpt      String
+  evidenceQuality    String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  profileId          String
+  profile            CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  capabilityLinks    CandidateCapabilityResumeLink[]
+
+  @@index([profileId, employer])
+}
+
+model CandidateCapabilityProjectLink {
+  id             String   @id @default(cuid())
+  supportReason  String
+  sourceExcerpt  String
+  evidenceQuality String
+  createdAt      DateTime @default(now())
+  capabilityId   String
+  capability     CandidateIntelligenceEvidence @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+  projectId      String
+  project        CandidatePortfolioProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([capabilityId, projectId])
+  @@index([projectId])
+}
+
+model CandidateCapabilityResumeLink {
+  id             String   @id @default(cuid())
+  supportReason  String
+  sourceExcerpt  String
+  evidenceQuality String
+  createdAt      DateTime @default(now())
+  capabilityId   String
+  capability     CandidateIntelligenceEvidence @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+  resumeEvidenceId String
+  resumeEvidence CandidateResumeEvidence @relation(fields: [resumeEvidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([capabilityId, resumeEvidenceId])
+  @@index([resumeEvidenceId])
+}
+
+model CandidateResumeReadiness {
+  id                    String   @id
+  capabilityCoverage    Int
+  industryCoverage      Int
+  domainCoverage        Int
+  leadershipCoverage    Int
+  portfolioSupport      Int
+  capabilitiesWithoutResume Json
+  capabilitiesWithoutPortfolio Json
+  evidenceDistribution Json
+  calculatedAt          DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  profileId             String   @unique
+  profile               CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model OpportunityIntelligence {
+  id                       String   @id @default(cuid())
+  version                  String
+  topReason                String
+  strengths                Json
+  missingEvidence          Json
+  concerns                 Json
+  confidenceExplanation    String
+  matchedSkills            Json
+  matchedIndustries        Json
+  matchedDomains           Json
+  leadershipSignals        Json
+  portfolioRecommendations Json
+  resumeRecommendations    Json
+  interviewTopics          Json
+  preparationChecklist     Json
+  generatedAt              DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  jobId                    String   @unique
+  job                      Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([generatedAt])
+}
