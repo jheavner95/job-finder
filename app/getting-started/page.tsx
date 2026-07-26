@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/app/components/PageHeader";
 import { prisma } from "@/lib/db";
+import { parsedExperienceFromStored } from "@/lib/candidate-intelligence/resume-structure";
 import { ensureOnboarding, getOnboardingState, strings } from "@/lib/onboarding";
 
 import { OnboardingWizard } from "./OnboardingWizard";
@@ -38,7 +39,14 @@ export default async function GettingStartedPage() {
           status: latestImport.status,
           createdAt: latestImport.createdAt.toISOString(),
           sourceText: latestImport.sourceText,
-          records: Array.isArray(latestImport.parsedEvidence) ? latestImport.parsedEvidence : [],
+          records: parsedExperienceFromStored(latestImport.parsedEvidence),
+          sectionsNeedingReview: (
+            latestImport.parsedEvidence
+            && typeof latestImport.parsedEvidence === "object"
+            && !Array.isArray(latestImport.parsedEvidence)
+            && "unclassifiedSections" in latestImport.parsedEvidence
+            && Array.isArray(latestImport.parsedEvidence.unclassifiedSections)
+          ) ? latestImport.parsedEvidence.unclassifiedSections.length : 0,
         } : null}
         importHistory={state.resumeImports.map((item) => ({
           id: item.id,

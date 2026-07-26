@@ -18,6 +18,7 @@ type ExperienceRecord = {
   title: string;
   startDate?: string | null;
   endDate?: string | null;
+  location?: string | null;
   responsibilities?: string[];
   leadership?: string[];
   domains?: string[];
@@ -32,6 +33,10 @@ type ExperienceRecord = {
   designSystems?: string[];
   enterprise?: string[];
   sourceExcerpt?: string;
+  sourceLines?: string[];
+  confidence?: "High confidence" | "Medium confidence" | "Low confidence" | "Unknown";
+  needsReview?: boolean;
+  editing?: boolean;
   skipped?: boolean;
 };
 
@@ -43,6 +48,7 @@ type ImportPreview = {
   createdAt?: string;
   sourceText: string;
   records: unknown[];
+  sectionsNeedingReview?: number;
 };
 
 const STEPS = ["Import Resume", "Review Experience", "Portfolio Projects", "Career Preferences", "Finish"];
@@ -53,7 +59,7 @@ function normalizeRecords(records: unknown[]): ExperienceRecord[] {
     item && typeof item === "object"
     && "employer" in item && typeof item.employer === "string"
     && "title" in item && typeof item.title === "string",
-  ));
+  )).map((item) => ({ ...item, editing: item.needsReview ?? false }));
 }
 
 export function OnboardingWizard(props: {
@@ -80,6 +86,12 @@ export function OnboardingWizard(props: {
   const completedProjects = props.projects.filter((project) => project.status === "Complete").length;
   const improvement = Math.max(0, props.currentReadiness - props.baselineReadiness);
   const approvedRecords = records.filter((record) => !record.skipped).length;
+  const responsibilityCount = records.reduce(
+    (total, record) => total + (record.responsibilities?.length ?? 0),
+    0,
+  );
+  const reviewCount = records.filter((record) => record.needsReview && !record.skipped).length
+    + (preview?.sectionsNeedingReview ?? 0);
 
   const go = (next: number) => {
     setError("");
@@ -118,6 +130,10 @@ export function OnboardingWizard(props: {
     endDate: "",
     responsibilities: [],
     sourceExcerpt: "",
+    sourceLines: [],
+    confidence: "Unknown",
+    needsReview: true,
+    editing: true,
   }]);
 
   const updateRecord = (index: number, patch: Partial<ExperienceRecord>) => {
@@ -236,22 +252,45 @@ export function OnboardingWizard(props: {
             <p className="eyebrow">Review before saving</p>
             <h2>Confirm your experience</h2>
             <p className="wizard-lead">Approve, edit, or skip each explicit record. Blank values remain Unknown.</p>
+            <div className="experience-summary" aria-label="Resume extraction summary">
+              <strong>Found</strong>
+              <span><b>{records.length}</b> experience records</span>
+              <span><b>{responsibilityCount}</b> responsibilities</span>
+              <span><b>{reviewCount}</b> sections needing review</span>
+            </div>
             {preview && <details className="source-preview"><summary>Preview extracted resume text</summary><pre>{preview.sourceText}</pre></details>}
             <div className="experience-list">
               {records.map((record, index) => (
                 <article key={`${index}-${record.employer}`} className={record.skipped ? "skipped" : ""}>
-                  <header><span>Experience {index + 1}</span><button type="button" onClick={() => updateRecord(index, { skipped: !record.skipped })}>{record.skipped ? "Restore" : "Skip"}</button></header>
-                  <div className="field-grid">
-                    <label>Employer<input value={record.employer} onChange={(event) => updateRecord(index, { employer: event.target.value })} /></label>
-                    <label>Title<input value={record.title} onChange={(event) => updateRecord(index, { title: event.target.value })} /></label>
-                    <label>Start date<input value={record.startDate ?? ""} placeholder="Unknown" onChange={(event) => updateRecord(index, { startDate: event.target.value })} /></label>
-                    <label>End date<input value={record.endDate ?? ""} placeholder="Unknown" onChange={(event) => updateRecord(index, { endDate: event.target.value })} /></label>
+                  <header>
+                    <span>Experience {index + 1}</span>
+                    <div className="experience-review-actions">
+                      <button type="button" onClick={() => updateRecord(index, { skipped: false, editing: false, needsReview: false })}>Approve</button>
+                      <button type="button" onClick={() => updateRecord(index, { skipped: false, editing: true })}>Edit</button>
+                      <button type="button" onClick={() => updateRecord(index, { skipped: true, editing: false })}>{record.skipped ? "Skipped" : "Skip"}</button>
+                    </div>
+                  </header>
+                  <div className="extraction-meta">
+                    <span className={`confidence-badge confidence-${(record.confidence ?? "Unknown").toLowerCase().replaceAll(" ", "-")}`}>
+                      {record.confidence ?? "Unknown"}
+                    </span>
+                    {record.needsReview && !record.skipped && <span>Needs review</span>}
                   </div>
-                  <label>Explicit responsibilities<textarea value={(record.responsibilities ?? []).join("\n")} placeholder="Unknown" onChange={(event) => updateRecord(index, { responsibilities: event.target.value.split("\n").filter(Boolean) })} /></label>
-                  <small>Source excerpt: {record.sourceExcerpt || "Not detected — review required"}</small>
+                  <div className="field-grid">
+                    <label>Employer<input disabled={!record.editing} value={record.employer} onChange={(event) => updateRecord(index, { employer: event.target.value })} /></label>
+                    <label>Title<input disabled={!record.editing} value={record.title} onChange={(event) => updateRecord(index, { title: event.target.value })} /></label>
+                    <label>Start date<input disabled={!record.editing} value={record.startDate ?? ""} placeholder="Unknown" onChange={(event) => updateRecord(index, { startDate: event.target.value })} /></label>
+                    <label>End date<input disabled={!record.editing} value={record.endDate ?? ""} placeholder="Unknown" onChange={(event) => updateRecord(index, { endDate: event.target.value })} /></label>
+                    <label>Location<input disabled={!record.editing} value={record.location ?? ""} placeholder="Unknown" onChange={(event) => updateRecord(index, { location: event.target.value })} /></label>
+                  </div>
+                  <label>Explicit responsibilities<textarea disabled={!record.editing} value={(record.responsibilities ?? []).join("\n")} placeholder="Unknown" onChange={(event) => updateRecord(index, { responsibilities: event.target.value.split("\n").filter(Boolean) })} /></label>
+                  <details className="record-source">
+                    <summary>Source excerpt</summary>
+                    <pre>{record.sourceExcerpt || "Not detected — review required"}</pre>
+                  </details>
                 </article>
               ))}
-              {!records.length && <div className="wizard-empty"><strong>No structured employers were detected.</strong><p>The resume text is available above. Add only experience you can verify directly from it.</p></div>}
+              {!records.length && <div className="wizard-empty"><strong>We found resume text, but could not confidently identify employment records.</strong><p>The resume text is available above. Add only experience you can verify directly from it.</p></div>}
             </div>
             <button className="secondary-button" type="button" onClick={addExperience}>+ Add verified experience</button>
             <div className="wizard-actions"><button type="button" onClick={() => go(1)}>Back</button><button className="primary-button" type="button" disabled={isPending || !preview} onClick={submitExperience}>Approve {approvedRecords} records and continue</button></div>

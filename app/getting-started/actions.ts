@@ -58,7 +58,8 @@ export async function uploadResume(formData: FormData) {
     id: resumeImport.id,
     fileName: resumeImport.fileName,
     sourceText,
-    records: parsed,
+    records: parsed.experience,
+    sectionsNeedingReview: parsed.unclassifiedSections.length,
   };
 }
 
@@ -79,7 +80,8 @@ export async function rerunResumeExtraction(importId: string) {
     fileType: resumeImport.fileType,
     status: "Preview",
     sourceText: resumeImport.sourceText,
-    records,
+    records: records.experience,
+    sectionsNeedingReview: records.unclassifiedSections.length,
   };
 }
 

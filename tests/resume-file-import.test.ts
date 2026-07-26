@@ -2,6 +2,7 @@ import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 
 import { extractResumeFileText } from "../lib/candidate-intelligence/resume-file";
+import { parseResumeStructure } from "../lib/candidate-intelligence/resume-structure";
 
 const encoder = new TextEncoder();
 
@@ -50,22 +51,46 @@ async function createTextDocx(text: string) {
 
 describe("resume file text extraction", () => {
   it("imports Markdown", async () => {
-    await expect(extractResumeFileText("resume.md", encoder.encode("# Resume\nMarkdown evidence")))
-      .resolves.toContain("Markdown evidence");
+    const text = await extractResumeFileText(
+      "resume.md",
+      encoder.encode("# Resume\n\nEXPERIENCE\n\nAcorn Labs — Product Designer"),
+    );
+    expect(parseResumeStructure(text).experience[0]).toMatchObject({
+      employer: "Acorn Labs",
+      title: "Product Designer",
+    });
   });
 
   it("imports TXT", async () => {
-    await expect(extractResumeFileText("resume.txt", encoder.encode("Plain text evidence")))
-      .resolves.toBe("Plain text evidence");
+    const text = await extractResumeFileText(
+      "resume.txt",
+      encoder.encode("WORK HISTORY\n\nProduct Designer | Birch Systems"),
+    );
+    expect(parseResumeStructure(text).experience[0]).toMatchObject({
+      employer: "Birch Systems",
+      title: "Product Designer",
+    });
   });
 
   it("imports PDF", async () => {
-    await expect(extractResumeFileText("resume.pdf", createTextPdf("PDF resume evidence")))
-      .resolves.toContain("PDF resume evidence");
+    const text = await extractResumeFileText(
+      "resume.pdf",
+      createTextPdf("Cedar Works | Senior Product Designer"),
+    );
+    expect(parseResumeStructure(text).experience[0]).toMatchObject({
+      employer: "Cedar Works",
+      title: "Senior Product Designer",
+    });
   });
 
   it("imports DOCX", async () => {
-    await expect(extractResumeFileText("resume.docx", await createTextDocx("DOCX resume evidence")))
-      .resolves.toContain("DOCX resume evidence");
+    const text = await extractResumeFileText(
+      "resume.docx",
+      await createTextDocx("Principal Product Designer — Dogwood Software"),
+    );
+    expect(parseResumeStructure(text).experience[0]).toMatchObject({
+      employer: "Dogwood Software",
+      title: "Principal Product Designer",
+    });
   });
 });

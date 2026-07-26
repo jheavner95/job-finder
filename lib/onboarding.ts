@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-import { extractResumeEvidence } from "./candidate-intelligence/resume-import";
+import { parseResumeStructure } from "./candidate-intelligence/resume-structure";
 
 export const CANDIDATE_ID = "primary-candidate";
 export const ONBOARDING_STEPS = [
@@ -93,7 +93,7 @@ export async function ensureOnboarding(database: PrismaClient) {
 }
 
 export function parseResumeText(sourceText: string) {
-  return extractResumeEvidence(sourceText);
+  return parseResumeStructure(sourceText);
 }
 
 function percent(numerator: number, denominator: number) {
