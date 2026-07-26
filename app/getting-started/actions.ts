@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { ensureOpportunityIntelligence } from "@/lib/candidate-intelligence/service";
+import { extractResumeFileText } from "@/lib/candidate-intelligence/resume-file";
 import { prisma } from "@/lib/db";
 import {
   CANDIDATE_ID,
@@ -11,29 +12,6 @@ import {
   parseResumeText,
   recalculateResumeEvidence,
 } from "@/lib/onboarding";
-
-async function extractText(file: File) {
-  const extension = file.name.split(".").pop()?.toLowerCase();
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (extension === "md" || extension === "txt") {
-    return new TextDecoder().decode(bytes);
-  }
-  if (extension === "docx") {
-    const mammoth = await import("mammoth");
-    const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
-    return result.value;
-  }
-  if (extension === "pdf") {
-    const { PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse({ data: bytes });
-    try {
-      return (await parser.getText()).text;
-    } finally {
-      await parser.destroy();
-    }
-  }
-  throw new Error("Choose a PDF, DOCX, Markdown, or TXT file.");
-}
 
 async function setStep(step: number) {
   const onboarding = await ensureOnboarding(prisma);
@@ -62,7 +40,8 @@ export async function uploadResume(formData: FormData) {
   if (!["pdf", "docx", "md", "txt"].includes(extension)) {
     throw new Error("Choose a PDF, DOCX, Markdown, or TXT file.");
   }
-  const sourceText = (await extractText(file)).trim();
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const sourceText = (await extractResumeFileText(file.name, bytes)).trim();
   if (!sourceText) throw new Error("No readable text was found in this file.");
   const parsed = parseResumeText(sourceText);
   const resumeImport = await prisma.candidateResumeImport.create({
