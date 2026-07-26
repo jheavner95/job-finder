@@ -1,4 +1,5 @@
 import { PageHeader } from "@/app/components/PageHeader";
+import { SubmitButton } from "@/app/components/SubmitButton";
 import { completeCandidateEvidence } from "@/lib/candidate-intelligence/evidence-completion";
 import { EVIDENCE_QUALITY } from "@/lib/candidate-intelligence/readiness";
 import { prisma } from "@/lib/db";
@@ -158,7 +159,7 @@ export default async function EvidencePage() {
                 <div><h3>{project.name}</h3><p>{project.evidenceQuality} evidence · {project.portfolioReadiness}% ready when archived</p></div>
                 <form action={restoreArchivedProject}>
                   <input type="hidden" name="projectId" value={project.id} />
-                  <button type="submit">Restore project</button>
+                  <SubmitButton className="text-button" pendingLabel="Restoring…" ariaLabel={`Restore ${project.name}`}>Restore project</SubmitButton>
                 </form>
               </article>
             ))}

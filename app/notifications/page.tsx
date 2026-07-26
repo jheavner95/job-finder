@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageHeader } from "@/app/components/PageHeader";
+import { SubmitButton } from "@/app/components/SubmitButton";
 import { prisma } from "@/lib/db";
 
 import {
@@ -22,7 +23,7 @@ export default async function NotificationsPage() {
       <PageHeader
         title="Notifications"
         subtitle="Local in-app updates from discovery orchestration. No messages leave this device."
-        action={unread ? <form action={markAllNotificationsReadAction}><button className="secondary-button">Mark all read</button></form> : undefined}
+        action={unread ? <form action={markAllNotificationsReadAction}><SubmitButton pendingLabel="Updating…">Mark all read</SubmitButton></form> : undefined}
       />
       <div className="notification-list">
         {notifications.map((notification) => (
@@ -36,7 +37,7 @@ export default async function NotificationsPage() {
             </div>
             <div className="notification-actions">
               {notification.href && <Link href={notification.href}>View →</Link>}
-              {!notification.readAt && <form action={markNotificationReadAction}><input type="hidden" name="notificationId" value={notification.id} /><button type="submit">Mark read</button></form>}
+              {!notification.readAt && <form action={markNotificationReadAction}><input type="hidden" name="notificationId" value={notification.id} /><SubmitButton className="text-button" pendingLabel="Updating…" ariaLabel={`Mark ${notification.title} as read`}>Mark read</SubmitButton></form>}
             </div>
           </article>
         ))}

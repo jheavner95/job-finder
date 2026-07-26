@@ -1,4 +1,5 @@
 import { PageHeader } from "@/app/components/PageHeader";
+import { SubmitButton } from "@/app/components/SubmitButton";
 import { prisma } from "@/lib/db";
 import { SCHEDULE_TYPES, scheduleLabel } from "@/lib/scheduling/schedule";
 
@@ -66,7 +67,7 @@ export default async function SavedSearchesPage({
                 <label>Time<input name="timeOfDay" type="time" defaultValue={connector.schedule?.timeOfDay ?? "08:00"} /></label>
                 <label>Weekly day<select name="weekday" defaultValue={connector.schedule?.weekday ?? 1}>{["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day, index) => <option value={index} key={day}>{day}</option>)}</select></label>
                 <label>Interval minutes<input name="intervalMinutes" type="number" min="5" max="43200" defaultValue={connector.schedule?.intervalMinutes ?? 60} /></label>
-                <button type="submit" className="secondary-button">Save search</button>
+                <SubmitButton pendingLabel="Saving search…">Save search</SubmitButton>
               </div>
             </form>
           );

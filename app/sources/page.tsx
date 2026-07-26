@@ -1,4 +1,5 @@
 import { PageHeader } from "@/app/components/PageHeader";
+import { SubmitButton } from "@/app/components/SubmitButton";
 import { prisma } from "@/lib/db";
 import { mapError } from "@/lib/errors/app-error";
 import { jobSourceRegistry } from "@/lib/job-sources/registry";
@@ -95,7 +96,7 @@ export default async function SourcesPage({
           <p>Each source is checked one at a time and follows the provider&apos;s published access rules.</p>
         </div>
         <div className="source-toolbar-actions">
-          <form action={runScheduledDiscoveryAction}><button className="secondary-button" type="submit">Run due schedules</button></form>
+          <form action={runScheduledDiscoveryAction}><SubmitButton pendingLabel="Running discovery…">Run due schedules</SubmitButton></form>
           <a className="secondary-button button-link" href="/searches">Manage searches</a>
         </div>
       </section>
@@ -140,12 +141,12 @@ export default async function SourcesPage({
                   <td className="source-actions">
                     <form action={runProviderDiscoveryAction}>
                       <input type="hidden" name="connectorId" value={connector.id} />
-                      <button className="source-run" type="submit" disabled={!connector.enabled}>Run now</button>
+                      <SubmitButton className="source-run" pendingLabel="Running…" disabled={!connector.enabled} ariaLabel={`Run ${connector.company} now`}>Run now</SubmitButton>
                     </form>
                     <form action={toggleConnectorAction}>
                       <input type="hidden" name="connectorId" value={connector.id} />
                       <input type="hidden" name="enabled" value={connector.enabled ? "false" : "true"} />
-                      <button className="source-run" type="submit">{connector.enabled ? "Disable" : "Enable"}</button>
+                      <SubmitButton className="source-run" pendingLabel="Updating…" ariaLabel={`${connector.enabled ? "Disable" : "Enable"} ${connector.company}`}>{connector.enabled ? "Disable" : "Enable"}</SubmitButton>
                     </form>
                   </td>
                 </tr>
@@ -224,7 +225,7 @@ export default async function SourcesPage({
           <label>Request delay (ms)<input name="crawlDelay" type="number" min="0" max="60000" defaultValue="1000" /></label>
           <label>Rate limit (requests/min)<input name="rateLimit" type="number" min="1" max="600" defaultValue="60" /></label>
           <label className="source-notes">Notes<input name="notes" maxLength={2000} /></label>
-          <button className="secondary-button" type="submit">Save company</button>
+          <SubmitButton pendingLabel="Saving source…">Save company</SubmitButton>
         </form>
       </section>
     </div>
