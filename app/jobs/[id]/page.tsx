@@ -5,6 +5,7 @@ import { StatusPill } from "@/app/components/JobRow";
 import { getJob } from "@/lib/queries";
 import type { IntelligenceGuidanceItem } from "@/lib/candidate-intelligence/types";
 import { PostingContent } from "@/app/components/PostingContent";
+import { ReadingLayout } from "@/app/components/PageLayout";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,7 @@ export default async function JobDetailPage({
   if (!job) notFound();
 
   return (
-    <div className="page detail-page">
+    <ReadingLayout className="detail-page">
       <Link className="back-button" href="/review">← Back to review queue</Link>
       {(importState === "created" || importState === "duplicate") && (
         <div className="import-success" role="status">
@@ -270,6 +271,6 @@ export default async function JobDetailPage({
         </div>
         <DecisionForm jobId={job.id} currentStatus={job.status} />
       </div>
-    </div>
+    </ReadingLayout>
   );
 }

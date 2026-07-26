@@ -1,4 +1,5 @@
 import { PageHeader } from "@/app/components/PageHeader";
+import { WorkspaceLayout } from "@/app/components/PageLayout";
 import { SubmitButton } from "@/app/components/SubmitButton";
 import { prisma } from "@/lib/db";
 import { SCHEDULE_TYPES, scheduleLabel } from "@/lib/scheduling/schedule";
@@ -31,7 +32,7 @@ export default async function SavedSearchesPage({
   });
 
   return (
-    <div className="page searches-page">
+    <WorkspaceLayout className="searches-page">
       <PageHeader
         title="Saved searches"
         subtitle="Edit search criteria and schedules for each company source."
@@ -74,6 +75,6 @@ export default async function SavedSearchesPage({
         })}
         {!connectors.length && <div className="briefing-empty"><strong>No saved searches yet.</strong><p>Add a company source to create one.</p></div>}
       </div>
-    </div>
+    </WorkspaceLayout>
   );
 }

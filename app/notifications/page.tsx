@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageHeader } from "@/app/components/PageHeader";
+import { WorkspaceLayout } from "@/app/components/PageLayout";
 import { SubmitButton } from "@/app/components/SubmitButton";
 import { prisma } from "@/lib/db";
 
@@ -19,7 +20,7 @@ export default async function NotificationsPage() {
   const unread = notifications.filter((notification) => !notification.readAt).length;
 
   return (
-    <div className="page notifications-page">
+    <WorkspaceLayout className="notifications-page">
       <PageHeader
         title="Notifications"
         subtitle="Local in-app updates from discovery orchestration. No messages leave this device."
@@ -43,6 +44,6 @@ export default async function NotificationsPage() {
         ))}
         {!notifications.length && <div className="briefing-empty"><strong>You’re all caught up.</strong><p>Completed searches and source issues will appear here.</p></div>}
       </div>
-    </div>
+    </WorkspaceLayout>
   );
 }

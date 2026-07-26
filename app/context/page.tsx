@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageHeader } from "@/app/components/PageHeader";
+import { ReadingLayout } from "@/app/components/PageLayout";
 import {
   careerProfileTasks,
   estimatedProfileMinutes,
@@ -64,7 +65,7 @@ export default async function ContextPage() {
   const quality = profileQuality(readiness.percentage);
 
   return (
-    <div className="page career-page profile-workspace">
+    <ReadingLayout className="career-page profile-workspace">
       <PageHeader
         title="Career Profile"
         subtitle="Complete the information Job Finder uses to make recommendations more relevant and explainable."
@@ -155,6 +156,6 @@ export default async function ContextPage() {
           </section>
         </div>
       </details>
-    </div>
+    </ReadingLayout>
   );
 }

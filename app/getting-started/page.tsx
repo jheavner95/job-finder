@@ -1,4 +1,5 @@
 import { PageHeader } from "@/app/components/PageHeader";
+import { ReadingLayout } from "@/app/components/PageLayout";
 import { prisma } from "@/lib/db";
 import { parsedExperienceFromStored } from "@/lib/candidate-intelligence/resume-structure";
 import { ensureOnboarding, getOnboardingState, strings } from "@/lib/onboarding";
@@ -28,7 +29,7 @@ export default async function GettingStartedPage({
     : onboarding.currentStep;
 
   return (
-    <div className="page onboarding-page">
+    <ReadingLayout className="onboarding-page">
       <PageHeader
         title="Getting Started"
         subtitle="Build trustworthy Job Finder recommendations from information you review and approve."
@@ -92,6 +93,6 @@ export default async function GettingStartedPage({
         resumeCount={state.resumeEvidence.length}
         capabilityCoverage={state.resumeReadiness?.capabilityCoverage ?? 0}
       />
-    </div>
+    </ReadingLayout>
   );
 }

@@ -1,4 +1,5 @@
 import { JobRow } from "@/app/components/JobRow";
+import { WorkspaceLayout } from "@/app/components/PageLayout";
 import { PageHeader } from "@/app/components/PageHeader";
 import { getJobs } from "@/lib/queries";
 import type { JobStatus } from "@/lib/types";
@@ -28,7 +29,7 @@ export default async function ReviewPage({
   });
 
   return (
-    <div className="page">
+    <WorkspaceLayout>
       <PageHeader
         title="Review queue"
         subtitle="Imported opportunities compared with your saved career profile."
@@ -66,6 +67,6 @@ export default async function ReviewPage({
       ) : (
         <div className="empty-state"><strong>{jobs.length ? "No jobs found" : "No opportunities are waiting for review."}</strong><p>{jobs.length ? "Try a broader filter or search term." : "Newly imported opportunities will appear here."}</p></div>
       )}
-    </div>
+    </WorkspaceLayout>
   );
 }

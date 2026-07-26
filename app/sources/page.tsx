@@ -1,5 +1,6 @@
 import { PageHeader } from "@/app/components/PageHeader";
 import { SubmitButton } from "@/app/components/SubmitButton";
+import { WorkspaceLayout } from "@/app/components/PageLayout";
 import { prisma } from "@/lib/db";
 import { mapError } from "@/lib/errors/app-error";
 import { jobSourceRegistry } from "@/lib/job-sources/registry";
@@ -62,7 +63,7 @@ export default async function SourcesPage({
   );
 
   return (
-    <div className="page sources-page">
+    <WorkspaceLayout className="sources-page">
       <PageHeader
         title="Sources"
         subtitle="Private company sources that find matching jobs from public career pages."
@@ -228,6 +229,6 @@ export default async function SourcesPage({
           <SubmitButton pendingLabel="Saving source…">Save company</SubmitButton>
         </form>
       </section>
-    </div>
+    </WorkspaceLayout>
   );
 }

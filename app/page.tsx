@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WorkspaceLayout } from "@/app/components/PageLayout";
 
 import { LocalGreeting } from "@/app/components/LocalGreeting";
 import { evaluateContextLibrary } from "@/lib/context-readiness";
@@ -35,7 +36,7 @@ export default async function DashboardPage() {
     { label: "Recently closed", value: briefing.recentlyClosed },
   ].filter((item) => item.value > 0);
   return (
-    <div className="page briefing-page">
+    <WorkspaceLayout className="briefing-page">
       <header className="briefing-header">
         <div>
           <p className="eyebrow">Private workspace</p>
@@ -178,6 +179,6 @@ export default async function DashboardPage() {
           <Link className="text-button" href="/getting-started">Complete your profile →</Link>
         </div>
       )}
-    </div>
+    </WorkspaceLayout>
   );
 }

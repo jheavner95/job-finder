@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ReadingLayout } from "@/app/components/PageLayout";
 
 import { PageHeader } from "@/app/components/PageHeader";
 import { prisma } from "@/lib/db";
@@ -73,7 +74,7 @@ export default async function DailyBriefingPage() {
     : null;
 
   return (
-    <div className="page daily-briefing-page">
+    <ReadingLayout className="daily-briefing-page">
       <PageHeader
         title="Daily briefing"
         subtitle="What changed across scheduled and manual discovery in the last 24 hours."
@@ -177,6 +178,6 @@ export default async function DailyBriefingPage() {
           ) : <p className="panel-empty">No provider failures in the last 24 hours.</p>}
         </section>
       </div>
-    </div>
+    </ReadingLayout>
   );
 }

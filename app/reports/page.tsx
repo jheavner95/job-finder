@@ -1,4 +1,5 @@
 import { PageHeader } from "@/app/components/PageHeader";
+import { WorkspaceLayout } from "@/app/components/PageLayout";
 import { getReportSummary } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -6,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function ReportsPage() {
   const summary = await getReportSummary();
   return (
-    <div className="page">
+    <WorkspaceLayout>
       <PageHeader
         title="Reports"
         subtitle="Local summaries based only on activity Job Finder has actually processed."
@@ -26,6 +27,6 @@ export default async function ReportsPage() {
           <div className="report-score"><strong>{summary.strong}</strong><span>strong matches</span><small>of {summary.total} opportunities</small></div>
         </article>
       )}
-    </div>
+    </WorkspaceLayout>
   );
 }
