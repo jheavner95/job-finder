@@ -124,20 +124,6 @@ npm run db:restore -- path/to/private-backup.db
 The application binds to `127.0.0.1` by default. SQLite data and backups remain
 on the local machine.
 
-## Screenshots
-
-Public, privacy-safe screenshots are planned for:
-
-- Dashboard — `docs/screenshots/dashboard.png`
-- Daily Briefing — `docs/screenshots/daily-briefing.png`
-- Job Finder — `docs/screenshots/job-finder.png`
-- Review Queue — `docs/screenshots/review-queue.png`
-- Career Evidence — `docs/screenshots/career-evidence.png`
-- Onboarding — `docs/screenshots/onboarding.png`
-- Sources — `docs/screenshots/sources.png`
-
-These are placeholder locations; no screenshots containing personal or local
-data are included in the repository.
 
 ## Roadmap
 
