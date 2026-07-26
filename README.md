@@ -1,5 +1,7 @@
 # Job Finder
 
+![Dashboard](docs/screenshots/dashboard.png)
+
 A desktop-first career intelligence application that automatically discovers
 opportunities from multiple ATS providers, evaluates them using deterministic
 scoring, and helps candidates prepare stronger applications through explainable
