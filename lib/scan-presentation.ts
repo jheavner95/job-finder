@@ -15,6 +15,12 @@ function planned(value: unknown, fallback: number) {
   return typeof count === "number" ? count : fallback;
 }
 
+function selectedConnectorIds(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const ids = (value as Record<string, unknown>).selectedConnectorIds;
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+}
+
 function fatalError(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const error = (value as Record<string, unknown>).fatalError;
@@ -49,6 +55,30 @@ export async function getScanSnapshot(database: PrismaClient, batchId?: string |
   const matches = imported + duplicates;
   const total = planned(batch.metadata, batch.crawlRuns.length);
   const now = batch.completedAt ?? new Date();
+  const selectedIds = selectedConnectorIds(batch.metadata);
+  const selectedConnectors = selectedIds.length
+    ? await database.companyConnector.findMany({
+        where: { id: { in: selectedIds } },
+        orderBy: [{ atsType: "asc" }, { company: "asc" }],
+      })
+    : batch.crawlRuns.map((run) => run.connector);
+  const newOpportunities = imported > 0
+    ? await database.job.findMany({
+        where: {
+          isSynthetic: false,
+          firstSeenAt: {
+            gte: batch.startedAt,
+            lte: batch.completedAt ?? now,
+          },
+        },
+        include: {
+          company: true,
+          evaluations: { orderBy: { evaluatedAt: "desc" }, take: 1 },
+        },
+        orderBy: { firstSeenAt: "desc" },
+        take: imported,
+      })
+    : [];
 
   const events = batch.crawlRuns.flatMap((run) => {
     const items = [{
@@ -90,6 +120,34 @@ export async function getScanSnapshot(database: PrismaClient, batchId?: string |
     closed,
     failures,
     durationMs: batch.durationMs ?? now.getTime() - batch.startedAt.getTime(),
+    providers: selectedConnectors.map((connector) => {
+      const run = batch.crawlRuns.find((crawl) => crawl.connectorId === connector.id);
+      const runDiagnostics = diagnostics(run?.metadata);
+      const runExcluded = runDiagnostics?.excludedJobs.length ?? 0;
+      return {
+        id: connector.id,
+        provider: connector.atsType,
+        company: connector.company,
+        state: !run
+          ? batch.status === "Running" ? "Waiting" : "Not run"
+          : !run.completedAt ? "Running"
+            : run.status === "Blocked" ? "Blocked"
+              : run.status === "Failed" ? "Error"
+                : run.failures > 0 ? "Warning" : "Healthy",
+        discovered: run?.jobsDiscovered ?? 0,
+        matches: (run?.jobsImported ?? 0) + (run?.duplicates ?? 0),
+        imported: run?.jobsImported ?? 0,
+        duplicates: run?.duplicates ?? 0,
+        excluded: runExcluded,
+        explanation: run?.lastError ?? null,
+      };
+    }),
+    newOpportunities: newOpportunities.map((job) => ({
+      id: job.id,
+      title: job.title,
+      company: job.company.name,
+      score: job.evaluations[0]?.score ?? 0,
+    })),
     events,
     exclusions: batch.crawlRuns.flatMap((run) =>
       (diagnostics(run.metadata)?.excludedJobs ?? []).map((job) => ({
@@ -107,6 +165,7 @@ export async function getScanSnapshot(database: PrismaClient, batchId?: string |
         ? "Review the source access policy."
         : "Retry this source after checking its career page.",
       retryable: run.status !== "Blocked",
+      severity: run.status === "Blocked" ? "Blocked" : run.status === "Failed" ? "Error" : "Warning",
       })),
       ...(fatalError(batch.metadata) ? [{
         id: batch.id,
@@ -115,6 +174,7 @@ export async function getScanSnapshot(database: PrismaClient, batchId?: string |
         explanation: fatalError(batch.metadata) as string,
         nextAction: "Review source configuration and run the scan again.",
         retryable: true,
+        severity: "Error",
       }] : []),
     ],
   };

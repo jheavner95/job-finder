@@ -14,6 +14,12 @@ function date(value: Date | string | null | undefined) {
   }).format(new Date(value));
 }
 
+function historyDate(value: Date) {
+  const today = new Date();
+  const day = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(value);
+  return value.toDateString() === today.toDateString() ? "Today" : day;
+}
+
 export default async function ScanPage({
   searchParams,
 }: {
@@ -49,29 +55,31 @@ export default async function ScanPage({
   return (
     <WorkspaceLayout className="scan-page">
       <PageHeader title="Scan Jobs" subtitle="Review what will run, start discovery, and monitor real provider activity." />
-      <div className="scan-overview">
-        <div><small>Last scan</small><strong>{date(batches.find((batch) => batch.status !== "Running")?.completedAt)}</strong></div>
-        <div><small>Next scheduled scan</small><strong>{nextSchedule?.nextRunAt ? date(nextSchedule.nextRunAt) : "Manual only"}</strong></div>
+      <section className={`automation-header ${nextSchedule?.nextRunAt ? "automation-enabled" : "automation-manual"}`}>
+        <div className="automation-state">
+          <span aria-hidden="true">{nextSchedule?.nextRunAt ? "✓" : "○"}</span>
+          <div><small>{nextSchedule?.nextRunAt ? "Automatic scanning" : "Manual mode"}</small><strong>{nextSchedule?.nextRunAt ? "Enabled" : "Automatic scanning is disabled."}</strong></div>
+        </div>
+        <div><small>{nextSchedule?.nextRunAt ? "Next scan" : "Last scan"}</small><strong>{nextSchedule?.nextRunAt ? date(nextSchedule.nextRunAt) : date(batches.find((batch) => batch.status !== "Running")?.completedAt)}</strong></div>
         <div><small>Enabled sources</small><strong>{connectors.length}</strong></div>
-      </div>
+        <Link className="secondary-button button-link" href="/searches">Configure schedule</Link>
+      </section>
       <ScanControl initial={snapshot} connectors={connectorProps} />
 
       <section className="scan-history">
         <div className="scan-section-heading"><div><p className="eyebrow">History</p><h2>Recent scans</h2></div></div>
-        <div className="sources-table-wrap">
-          <table className="sources-table">
-            <thead><tr><th>Started</th><th>Trigger</th><th>Status</th><th>Sources</th><th>Jobs found</th><th>Matches</th><th>Imports</th><th>Duplicates</th><th>Failures</th><th>Duration</th></tr></thead>
-            <tbody>{batches.map((batch) => (
-              <tr key={batch.id}>
-                <td><Link href={`/scan?batchId=${batch.id}`}>{date(batch.startedAt)}</Link></td>
-                <td>{batch.trigger}</td><td>{batch.status}</td><td>{batch.connectorsRun}</td>
-                <td>{batch.jobsDiscovered}</td><td>{batch.jobsImported + batch.duplicates}</td>
-                <td>{batch.jobsImported}</td><td>{batch.duplicates}</td><td>{batch.failures}</td>
-                <td>{batch.durationMs === null ? "—" : `${Math.round(batch.durationMs / 1000)}s`}</td>
-              </tr>
-            ))}{!batches.length && <tr><td className="sources-empty" colSpan={10}>Job Finder has not scanned for opportunities yet.</td></tr>}</tbody>
-          </table>
-        </div>
+        <div className="history-card-list">{batches.map((batch) => (
+          <Link href={`/scan?batchId=${batch.id}`} key={batch.id} className={params.batchId === batch.id ? "selected" : ""}>
+            <div><strong>{historyDate(batch.startedAt)}</strong><small>{date(batch.startedAt)} · {batch.trigger}</small></div>
+            <dl>
+              <div><dd>{batch.jobsDiscovered}</dd><dt>scanned</dt></div>
+              <div><dd>{batch.jobsImported + batch.duplicates}</dd><dt>matched</dt></div>
+              <div><dd>{batch.jobsImported}</dd><dt>new</dt></div>
+              <div><dd>{batch.duplicates}</dd><dt>duplicates</dt></div>
+            </dl>
+            <span>{batch.status === "CompletedWithErrors" ? "Warnings" : batch.status}<small>{batch.durationMs === null ? "—" : `${(batch.durationMs / 1000).toFixed(1)} sec`}</small></span>
+          </Link>
+        ))}{!batches.length && <div className="sources-empty">Job Finder has not scanned for opportunities yet.</div>}</div>
       </section>
     </WorkspaceLayout>
   );
