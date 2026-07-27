@@ -6,6 +6,7 @@ import { ReadingLayout } from "@/app/components/PageLayout";
 import { StatusPill } from "@/app/components/JobRow";
 import type { IntelligenceGuidanceItem } from "@/lib/candidate-intelligence/types";
 import { getJob } from "@/lib/queries";
+import { prisma } from "@/lib/db";
 import type { JobDetailModel } from "@/lib/view-models";
 import { OpportunityActions } from "./OpportunityActions";
 import { SearchablePosting } from "./SearchablePosting";
@@ -118,7 +119,10 @@ export default async function JobDetailPage({
 }) {
   const { id } = await params;
   const query = await searchParams;
-  const job = await getJob(id);
+  const [job, application] = await Promise.all([
+    getJob(id),
+    prisma.application.findUnique({ where: { jobId: id }, select: { id: true, status: true } }),
+  ]);
   if (!job) notFound();
 
   const canInspect = process.env.NODE_ENV === "development"
@@ -152,7 +156,7 @@ export default async function JobDetailPage({
         <div className="opportunity-score">
           <strong>{job.score}</strong><span>Match</span><small>{matchLabel(job.score)}</small>
         </div>
-        <OpportunityActions jobId={job.id} sourceUrl={job.sourceUrl} />
+        <OpportunityActions jobId={job.id} sourceUrl={job.sourceUrl} application={application} />
       </header>
 
       <div className="opportunity-coaching">

@@ -4,6 +4,7 @@ export type NavIconName =
   | "layout"
   | "sunrise"
   | "clipboard-check"
+  | "briefcase"
   | "radar"
   | "bookmark-search"
   | "upload"
@@ -24,6 +25,9 @@ export function NavIcon({ name }: { name: NavIconName }) {
       break;
     case "clipboard-check":
       paths = <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V2h6v2M9 13l2 2 4-5" /></>;
+      break;
+    case "briefcase":
+      paths = <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M9 7V4h6v3M3 12h18M10 12v2h4v-2" /></>;
       break;
     case "radar":
       paths = <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><path d="M12 12l5-5M12 3v2M21 12h-2" /></>;

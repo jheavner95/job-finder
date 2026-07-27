@@ -19,7 +19,7 @@ function scoreTone(score: number) {
 }
 
 export default async function DashboardPage() {
-  const [summary, readiness, lastScan, nextSchedule] = await Promise.all([
+  const [summary, readiness, lastScan, nextSchedule, applications] = await Promise.all([
     getDashboardSummary(),
     evaluateContextLibrary(),
     prisma.discoveryBatch.findFirst({
@@ -29,6 +29,13 @@ export default async function DashboardPage() {
     prisma.connectorSchedule.findFirst({
       where: { nextRunAt: { not: null }, connector: { enabled: true } },
       orderBy: { nextRunAt: "asc" },
+    }),
+    prisma.application.findMany({
+      include: {
+        followUps: { where: { completedAt: null }, orderBy: { dueAt: "asc" } },
+        interviews: { orderBy: { scheduledAt: "asc" } },
+      },
+      orderBy: { updatedAt: "desc" },
     }),
   ]);
   const briefing = presentDashboard(summary.jobs);
@@ -44,6 +51,24 @@ export default async function DashboardPage() {
     { label: "Saved opportunities", value: briefing.saved },
     { label: "Recently closed", value: briefing.recentlyClosed },
   ].filter((item) => item.value > 0);
+  const now = new Date();
+  const endOfToday = new Date(now);
+  endOfToday.setHours(23, 59, 59, 999);
+  const endOfWeek = new Date(now);
+  endOfWeek.setDate(endOfWeek.getDate() + 7);
+  const applicationsInProgress = applications.filter((item) =>
+    !["Accepted", "Declined", "Rejected", "Withdrawn", "Closed"].includes(item.status),
+  );
+  const interviewsThisWeek = applications.reduce(
+    (sum, item) => sum + item.interviews.filter((interview) =>
+      interview.scheduledAt >= now && interview.scheduledAt <= endOfWeek,
+    ).length,
+    0,
+  );
+  const followUpsDueToday = applications.reduce(
+    (sum, item) => sum + item.followUps.filter((followUp) => followUp.dueAt <= endOfToday).length,
+    0,
+  );
   return (
     <WorkspaceLayout className="briefing-page">
       <header className="briefing-header">
@@ -59,6 +84,18 @@ export default async function DashboardPage() {
           </Link>
         )}
       </header>
+
+      <section className="dashboard-pipeline" aria-labelledby="dashboard-pipeline-title">
+        <div><p className="eyebrow">Application intelligence</p><h2 id="dashboard-pipeline-title">Your career pipeline</h2></div>
+        <dl>
+          <div><dt>New opportunities</dt><dd>{briefing.awaitingReview}</dd></div>
+          <div><dt>Applications in progress</dt><dd>{applicationsInProgress.length}</dd></div>
+          <div><dt>Interviews this week</dt><dd>{interviewsThisWeek}</dd></div>
+          <div><dt>Follow-ups due today</dt><dd>{followUpsDueToday}</dd></div>
+          <div><dt>Offers</dt><dd>{applications.filter((item) => item.status === "Offer").length}</dd></div>
+        </dl>
+        <Link className="secondary-button button-link" href="/applications">Open Applications</Link>
+      </section>
 
       <section className="dashboard-scan-card" aria-labelledby="dashboard-scan-title">
         <div>
@@ -179,18 +216,18 @@ export default async function DashboardPage() {
         <div className="briefing-section-heading compact">
           <div><p className="eyebrow">Application activity</p><h2 id="activity-title">Your active pipeline</h2></div>
         </div>
-        {briefing.activeApplications.length ? (
+        {applicationsInProgress.length ? (
           <ul>
-            {briefing.activeApplications.map((job) => (
-              <li key={job.id}>
-                <span className="application-state">{job.status}</span>
-                <div><strong>{job.title}</strong><span>{job.company}</span></div>
-                <Link href={`/jobs/${job.id}`} aria-label={`View application activity for ${job.title} at ${job.company}`}>View role <span aria-hidden="true">→</span></Link>
+            {applicationsInProgress.slice(0, 6).map((application) => (
+              <li key={application.id}>
+                <span className="application-state">{application.status}</span>
+                <div><strong>{application.role}</strong><span>{application.company}</span></div>
+                <Link href={`/applications/${application.id}`} aria-label={`View application activity for ${application.role} at ${application.company}`}>View application <span aria-hidden="true">→</span></Link>
               </li>
             ))}
           </ul>
         ) : (
-          <div className="activity-empty"><strong>No active applications yet.</strong><p>Roles you mark as Applied will appear here.</p></div>
+          <div className="activity-empty"><strong>No active applications yet.</strong><p>Begin from an opportunity when you are ready to prepare an application.</p></div>
         )}
       </section>
 

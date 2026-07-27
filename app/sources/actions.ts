@@ -7,9 +7,119 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { jobSourceRegistry } from "@/lib/job-sources/registry";
 import { EMPTY_JOB_SEARCH } from "@/lib/job-sources/types";
+import { detectCompanySource, type DetectedCompanySource } from "@/lib/job-sources/detection";
+import { checkRobots } from "@/lib/job-sources/robots";
 import { DiscoveryScheduler } from "@/lib/scheduling/discovery-scheduler";
 import { GreenhouseProvider } from "@/lib/job-sources/providers/greenhouse";
 import { DiscoveryService } from "@/lib/job-sources/services/discovery-service";
+
+export type CompanyValidationState = {
+  status: "idle" | "verified" | "blocked";
+  company?: string;
+  careerUrl?: string;
+  message?: string;
+  detection?: DetectedCompanySource;
+  jobsDiscovered?: number;
+  diagnosticId?: string;
+  checks?: Array<{ label: string; detail: string; ok: boolean }>;
+};
+
+export async function validateCompanySourceAction(
+  _previousState: CompanyValidationState,
+  formData: FormData,
+): Promise<CompanyValidationState> {
+  const company = String(formData.get("company") ?? "").trim();
+  const careerUrl = String(formData.get("careerUrl") ?? "").trim();
+  const diagnosticId = crypto.randomUUID().slice(0, 8).toUpperCase();
+  const base = { company, careerUrl, diagnosticId };
+  if (!company || !URL.canParse(careerUrl)) {
+    return {
+      ...base,
+      status: "blocked",
+      message: "Enter a company name and a complete public career URL.",
+      checks: [{ label: "Career URL", detail: "A valid public URL is required.", ok: false }],
+    };
+  }
+
+  const detection = detectCompanySource(careerUrl);
+  if (!detection) {
+    return {
+      ...base,
+      status: "blocked",
+      message: "The career platform was not recognized. Check the public careers URL and try again.",
+      checks: [
+        { label: "Career page", detail: "URL format accepted.", ok: true },
+        { label: "Provider detection", detail: "No supported public provider was recognized.", ok: false },
+      ],
+    };
+  }
+
+  const checks: NonNullable<CompanyValidationState["checks"]> = [
+    { label: "Provider detected", detail: detection.providerName, ok: true },
+    { label: "Board identifier found", detail: detection.connectorKey, ok: true },
+  ];
+  const url = new URL(careerUrl);
+  try {
+    const pageResponse = await fetch(careerUrl, {
+      headers: { "User-Agent": "job-search-intelligence/1.0" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!pageResponse.ok) throw new Error(`Career page returned ${pageResponse.status}.`);
+    checks.unshift({ label: "Career page reachable", detail: "Public page responded successfully.", ok: true });
+
+    const robots = await checkRobots(`${url.origin}/robots.txt`, url.pathname);
+    checks.push({
+      label: "Robots access",
+      detail: robots.allowed ? "Public discovery path is permitted." : robots.reason,
+      ok: robots.allowed,
+    });
+    if (!robots.allowed) {
+      return {
+        ...base,
+        detection,
+        status: "blocked",
+        message: "The provider was detected, but its robots policy prevents automated discovery.",
+        checks,
+      };
+    }
+
+    const provider = jobSourceRegistry.get(detection.providerId);
+    const jobs = await provider.discover(EMPTY_JOB_SEARCH, {
+      company,
+      careerUrl,
+      connectorKey: detection.connectorKey,
+      enabled: true,
+      robotsPolicy: robots.policy,
+      crawlDelay: robots.crawlDelay,
+      rateLimit: 60,
+    });
+    checks.push(
+      { label: "Public jobs endpoint", detail: detection.endpointLabel, ok: true },
+      { label: "Jobs available", detail: `${jobs.length} public jobs discovered.`, ok: true },
+    );
+    return {
+      ...base,
+      detection,
+      status: "verified",
+      message: `${detection.providerName} was detected automatically. The public connection is ready.`,
+      jobsDiscovered: jobs.length,
+      checks,
+    };
+  } catch (error) {
+    checks.push({
+      label: "Public connection",
+      detail: error instanceof Error ? error.message : "The public endpoint could not be verified.",
+      ok: false,
+    });
+    return {
+      ...base,
+      detection,
+      status: "blocked",
+      message: "The provider was detected, but the public connection could not be verified.",
+      checks,
+    };
+  }
+}
 
 const connectorSchema = z.object({
   company: z.string().trim().min(1).max(300),
@@ -73,6 +183,8 @@ export async function addCompanyConnectorAction(formData: FormData) {
       careerUrl: parsed.data.careerUrl,
       atsType: parsed.data.providerId,
       connectorKey: parsed.data.connectorKey,
+      enabled: true,
+      health: "Healthy",
       crawlDelay: parsed.data.crawlDelay,
       rateLimit: parsed.data.rateLimit,
       notes: parsed.data.notes || null,
@@ -90,8 +202,8 @@ export async function addCompanyConnectorAction(formData: FormData) {
       connectorKey: parsed.data.connectorKey,
       crawlDelay: parsed.data.crawlDelay,
       rateLimit: parsed.data.rateLimit,
-      enabled: false,
-      health: "Disabled",
+      enabled: true,
+      health: "Healthy",
       searchCriteria: EMPTY_JOB_SEARCH,
       notes: parsed.data.notes || null,
       schedule: {
@@ -336,4 +448,74 @@ export async function toggleConnectorAction(formData: FormData) {
   });
   revalidatePath("/sources");
   revalidatePath("/searches");
+}
+
+export async function validateConnectorAction(formData: FormData) {
+  const connectorId = String(formData.get("connectorId") ?? "");
+  const connector = await prisma.companyConnector.findUnique({ where: { id: connectorId } });
+  if (!connector) redirect("/sources?error=unavailable-connector");
+  const startedAt = new Date();
+  try {
+    const jobs = await jobSourceRegistry.get(connector.atsType).discover(EMPTY_JOB_SEARCH, {
+      company: connector.company,
+      careerUrl: connector.careerUrl,
+      connectorKey: connector.connectorKey,
+      enabled: true,
+      robotsPolicy: connector.robotsPolicy,
+      crawlDelay: connector.crawlDelay,
+      rateLimit: connector.rateLimit,
+    });
+    const completedAt = new Date();
+    await prisma.$transaction([
+      prisma.companyConnector.update({
+        where: { id: connector.id },
+        data: { health: "Healthy", lastChecked: completedAt },
+      }),
+      prisma.connectorCrawl.create({
+        data: {
+          connectorId: connector.id,
+          status: "Validation",
+          startedAt,
+          completedAt,
+          jobsDiscovered: jobs.length,
+          durationMs: completedAt.getTime() - startedAt.getTime(),
+          metadata: { validation: true, result: "Verified" },
+        },
+      }),
+    ]);
+    revalidatePath("/sources");
+    redirect(`/sources?validated=1&company=${encodeURIComponent(connector.company)}`);
+  } catch (error) {
+    const completedAt = new Date();
+    const message = error instanceof Error ? error.message : "Validation failed.";
+    await prisma.$transaction([
+      prisma.companyConnector.update({
+        where: { id: connector.id },
+        data: { health: "Warning", lastChecked: completedAt },
+      }),
+      prisma.connectorCrawl.create({
+        data: {
+          connectorId: connector.id,
+          status: "Validation failed",
+          startedAt,
+          completedAt,
+          failures: 1,
+          durationMs: completedAt.getTime() - startedAt.getTime(),
+          lastError: message,
+          metadata: { validation: true, result: "Blocked" },
+        },
+      }),
+    ]);
+    revalidatePath("/sources");
+    redirect(`/sources?validationFailed=1&company=${encodeURIComponent(connector.company)}`);
+  }
+}
+
+export async function removeConnectorAction(formData: FormData) {
+  const connectorId = String(formData.get("connectorId") ?? "");
+  if (!connectorId) redirect("/sources?error=unavailable-connector");
+  await prisma.companyConnector.delete({ where: { id: connectorId } });
+  revalidatePath("/sources");
+  revalidatePath("/searches");
+  redirect("/sources?removed=1");
 }

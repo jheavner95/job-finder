@@ -68,7 +68,7 @@ model Job {
   source                 JobSource @relation(fields: [sourceId], references: [id])
   evaluations            JobEvaluation[]
   decisions              UserDecision[]
-  applications           Application[]
+  application            Application?
   activity               ActivityEvent[]
   intelligence           OpportunityIntelligence?
   searchRuns             SearchRun[] @relation("JobsInSearchRun")
@@ -117,15 +117,152 @@ model UserDecision {
 }
 
 model Application {
-  id          String   @id @default(cuid())
-  status      JobStatus @default(APPLIED)
-  appliedAt   DateTime?
-  notes       String?
-  nextStepAt  DateTime?
-  jobId       String
-  job         Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String   @id @default(cuid())
+  status            String   @default("Preparing")
+  currentStage      String   @default("Preparing")
+  appliedAt         DateTime?
+  applicationUrl    String?
+  company           String
+  role              String
+  location          String?
+  salary            String?
+  recruiter         String?
+  hiringManager     String?
+  sourceProvider    String?
+  industry          String?
+  outcome           String?
+  rejectionReason   String?
+  archived          Boolean  @default(false)
+  notes             String?
+  nextStepAt        DateTime?
+  jobId             String   @unique
+  job               Job @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  statusHistory     ApplicationStatusHistory[]
+  timeline          ApplicationTimelineEvent[]
+  contacts          ApplicationContact[]
+  communications    ApplicationCommunication[]
+  documents         ApplicationDocument[]
+  interviews        ApplicationInterview[]
+  followUps         ApplicationFollowUp[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, archived])
+  @@index([appliedAt])
+}
+
+model ApplicationStatusHistory {
+  id            String   @id @default(cuid())
+  status        String
+  notes         String?
+  createdAt     DateTime @default(now())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+}
+
+model ApplicationTimelineEvent {
+  id                String   @id @default(cuid())
+  type              String
+  notes             String?
+  eventAt           DateTime @default(now())
+  applicationId     String
+  application       Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  relatedContactId  String?
+  relatedContact    ApplicationContact? @relation(fields: [relatedContactId], references: [id], onDelete: SetNull)
+  relatedDocumentId String?
+  relatedDocument   ApplicationDocument? @relation(fields: [relatedDocumentId], references: [id], onDelete: SetNull)
+
+  @@index([applicationId, eventAt])
+}
+
+model ApplicationContact {
+  id             String   @id @default(cuid())
+  kind           String
+  name           String
+  role           String?
+  email          String?
+  linkedin       String?
+  notes          String?
+  applicationId  String
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  timelineEvents ApplicationTimelineEvent[]
+  communications ApplicationCommunication[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([applicationId, kind])
+}
+
+model ApplicationCommunication {
+  id            String   @id @default(cuid())
+  channel       String
+  direction     String
+  summary       String
+  occurredAt    DateTime
+  attachment    String?
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  contactId     String?
+  contact       ApplicationContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+
+  @@index([applicationId, occurredAt])
+}
+
+model ApplicationDocument {
+  id             String   @id @default(cuid())
+  kind           String
+  versionLabel   String
+  referenceUrl   String?
+  notes          String?
+  submittedAt    DateTime?
+  applicationId  String
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  timelineEvents ApplicationTimelineEvent[]
+  createdAt      DateTime @default(now())
+
+  @@index([applicationId, kind])
+}
+
+model ApplicationInterview {
+  id               String   @id @default(cuid())
+  round            String
+  type             String
+  participants     String?
+  scheduledAt      DateTime
+  durationMinutes  Int?
+  preparationNotes String?
+  feedback         String?
+  outcome          String?
+  applicationId    String
+  application      Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([applicationId, scheduledAt])
+}
+
+model ApplicationFollowUp {
+  id            String   @id @default(cuid())
+  type          String
+  description   String
+  dueAt         DateTime
+  completedAt   DateTime?
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([dueAt, completedAt])
+  @@index([applicationId])
+}
+
+model CareerPerformanceSettings {
+  id            String   @id
+  minSampleSize Int      @default(5)
+  updatedAt     DateTime @updatedAt
 }
 
 model ActivityEvent {

@@ -9,9 +9,11 @@ const initialState: DecisionState = { status: "idle", message: "" };
 export function OpportunityActions({
   jobId,
   sourceUrl,
+  application,
 }: {
   jobId: string;
   sourceUrl: string;
+  application: { id: string; status: string } | null;
 }) {
   const [state, action, pending] = useActionState(updateJobDecision, initialState);
 
@@ -23,7 +25,9 @@ export function OpportunityActions({
 
   return (
     <div className="opportunity-actions">
-      <Link className="primary-button button-link" href={sourceUrl} target="_blank" rel="noreferrer">Apply</Link>
+      <Link className="primary-button button-link" href={application ? `/applications/${application.id}` : `/applications/new?jobId=${jobId}`}>
+        {application ? `Open Application · ${application.status}` : "Begin Application"}
+      </Link>
       <form action={action}>
         <input type="hidden" name="jobId" value={jobId} />
         <button className="secondary-button" name="status" value="Saved" disabled={pending}>Save</button>

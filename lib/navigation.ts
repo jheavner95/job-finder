@@ -6,6 +6,7 @@ export const NAV_GROUPS = [
       { href: "/", label: "Dashboard", icon: "layout" },
       { href: "/briefing", label: "Daily Briefing", icon: "sunrise" },
       { href: "/review", label: "Review Queue", icon: "clipboard-check" },
+      { href: "/applications", label: "Applications", icon: "briefcase" },
     ],
   },
   {
@@ -24,6 +25,7 @@ export const NAV_GROUPS = [
     items: [
       { href: "/context", label: "Career Profile", icon: "target" },
       { href: "/evidence", label: "Career Evidence", icon: "folder" },
+      { href: "/insights", label: "Insights", icon: "bar-chart" },
     ],
   },
   {
