@@ -7,6 +7,8 @@ import { prisma } from "@/lib/db";
 import {
   APPLICATION_OUTCOMES,
   isApplicationStage,
+  isTerminalApplicationStage,
+  validApplicationTransition,
 } from "@/lib/application-intelligence";
 
 function text(formData: FormData, key: string) {
@@ -74,6 +76,12 @@ export async function updateApplicationStatusAction(formData: FormData) {
   if (!isApplicationStage(status)) redirect(`/applications/${applicationId}?error=status`);
   const application = await prisma.application.findUnique({ where: { id: applicationId } });
   if (!application) redirect("/applications");
+  if (!validApplicationTransition(application.status, status)) {
+    redirect(`/applications/${applicationId}?error=invalid-transition`);
+  }
+  if (isTerminalApplicationStage(status) && formData.get("confirmTerminal") !== "true") {
+    redirect(`/applications/${applicationId}?error=confirm-terminal`);
+  }
 
   const isApplied = status === "Applied" && !application.appliedAt;
   const isOutcome = APPLICATION_OUTCOMES.includes(requestedStatus as (typeof APPLICATION_OUTCOMES)[number]);
@@ -85,7 +93,11 @@ export async function updateApplicationStatusAction(formData: FormData) {
         currentStage: status,
         appliedAt: isApplied ? new Date() : undefined,
         outcome: isOutcome ? requestedStatus : undefined,
+        outcomeDate: isOutcome ? dateValue(formData, "outcomeDate") : undefined,
         rejectionReason: status === "Rejected" ? optionalText(formData, "rejectionReason") : undefined,
+        futureEligibility: status === "Rejected" ? optionalText(formData, "futureEligibility") : undefined,
+        startDate: status === "Accepted" && text(formData, "startDate") ? dateValue(formData, "startDate") : undefined,
+        compensationNotes: status === "Accepted" ? optionalText(formData, "compensationNotes") : undefined,
         archived: status === "Closed",
       },
     }),
@@ -106,15 +118,29 @@ export async function updateApplicationStatusAction(formData: FormData) {
 
 export async function addTimelineEventAction(formData: FormData) {
   const applicationId = text(formData, "applicationId");
-  await prisma.applicationTimelineEvent.create({
-    data: {
-      applicationId,
-      type: text(formData, "type") || "Note",
-      notes: optionalText(formData, "notes"),
-      eventAt: dateValue(formData, "eventAt"),
-      relatedContactId: optionalText(formData, "relatedContactId"),
-      relatedDocumentId: optionalText(formData, "relatedDocumentId"),
-    },
+  await prisma.$transaction(async (transaction) => {
+    await transaction.applicationTimelineEvent.create({
+      data: {
+        applicationId,
+        type: text(formData, "type") || "Note",
+        notes: optionalText(formData, "notes"),
+        eventAt: dateValue(formData, "eventAt"),
+        relatedContactId: optionalText(formData, "relatedContactId"),
+        relatedDocumentId: optionalText(formData, "relatedDocumentId"),
+      },
+    });
+    const nextAction = optionalText(formData, "nextAction");
+    if (nextAction && text(formData, "nextActionAt")) {
+      await transaction.applicationFollowUp.create({
+        data: {
+          applicationId,
+          type: "Custom",
+          description: nextAction,
+          dueAt: dateValue(formData, "nextActionAt"),
+          contactId: optionalText(formData, "relatedContactId"),
+        },
+      });
+    }
   });
   revalidateApplication(applicationId);
 }
@@ -218,9 +244,15 @@ export async function addInterviewAction(formData: FormData) {
         participants: optionalText(formData, "participants"),
         scheduledAt,
         durationMinutes: Number(text(formData, "durationMinutes")) || null,
+        timezone: optionalText(formData, "timezone"),
+        format: optionalText(formData, "format"),
+        locationUrl: optionalText(formData, "locationUrl"),
         preparationNotes: optionalText(formData, "preparationNotes"),
+        questionsToAsk: optionalText(formData, "questionsToAsk"),
+        postInterviewNotes: optionalText(formData, "postInterviewNotes"),
         feedback: optionalText(formData, "feedback"),
         outcome: optionalText(formData, "outcome"),
+        followUpRequired: formData.get("followUpRequired") === "on",
       },
     }),
     prisma.applicationTimelineEvent.create({
@@ -240,13 +272,28 @@ export async function addFollowUpAction(formData: FormData) {
   const description = text(formData, "description");
   if (!description) return;
   const dueAt = dateValue(formData, "dueAt");
+  const duplicate = await prisma.applicationFollowUp.findFirst({
+    where: {
+      applicationId,
+      description,
+      dueAt,
+      completedAt: null,
+      cancelledAt: null,
+    },
+  });
+  if (duplicate) {
+    revalidateApplication(applicationId);
+    return;
+  }
   await prisma.$transaction([
     prisma.applicationFollowUp.create({
       data: {
         applicationId,
         type: text(formData, "type") || "Follow up",
         description,
+        notes: optionalText(formData, "notes"),
         dueAt,
+        contactId: optionalText(formData, "contactId"),
       },
     }),
     prisma.applicationTimelineEvent.create({
@@ -270,4 +317,147 @@ export async function completeFollowUpAction(formData: FormData) {
     },
   });
   revalidateApplication(followUp.applicationId);
+}
+
+export async function snoozeFollowUpAction(formData: FormData) {
+  const followUpId = text(formData, "followUpId");
+  const followUp = await prisma.applicationFollowUp.findUniqueOrThrow({ where: { id: followUpId } });
+  if (followUp.completedAt || followUp.cancelledAt) return;
+  const dueAt = text(formData, "dueAt")
+    ? dateValue(formData, "dueAt")
+    : new Date(followUp.dueAt.getTime() + 3 * 86_400_000);
+  await prisma.$transaction([
+    prisma.applicationFollowUp.update({
+      where: { id: followUp.id },
+      data: { snoozedFrom: followUp.dueAt, dueAt },
+    }),
+    prisma.applicationTimelineEvent.create({
+      data: {
+        applicationId: followUp.applicationId,
+        type: "Follow-up snoozed",
+        notes: `${followUp.description} moved to ${dueAt.toLocaleString("en-US")}.`,
+      },
+    }),
+  ]);
+  revalidateApplication(followUp.applicationId);
+}
+
+export async function cancelFollowUpAction(formData: FormData) {
+  const followUpId = text(formData, "followUpId");
+  const followUp = await prisma.applicationFollowUp.findUniqueOrThrow({ where: { id: followUpId } });
+  if (followUp.completedAt || followUp.cancelledAt) return;
+  await prisma.$transaction([
+    prisma.applicationFollowUp.update({ where: { id: followUp.id }, data: { cancelledAt: new Date() } }),
+    prisma.applicationTimelineEvent.create({
+      data: { applicationId: followUp.applicationId, type: "Follow-up cancelled", notes: followUp.description },
+    }),
+  ]);
+  revalidateApplication(followUp.applicationId);
+}
+
+export async function updateInterviewAction(formData: FormData) {
+  const interviewId = text(formData, "interviewId");
+  const operation = text(formData, "operation");
+  const interview = await prisma.applicationInterview.findUniqueOrThrow({ where: { id: interviewId } });
+  const applicationId = interview.applicationId;
+  if (operation === "complete") {
+    const createThankYou = formData.get("createThankYou") === "true";
+    await prisma.$transaction(async (transaction) => {
+      await transaction.applicationInterview.update({
+        where: { id: interview.id },
+        data: {
+          completedAt: new Date(),
+          postInterviewNotes: optionalText(formData, "postInterviewNotes"),
+          feedback: optionalText(formData, "feedback"),
+          outcome: optionalText(formData, "outcome"),
+        },
+      });
+      await transaction.applicationTimelineEvent.create({
+        data: { applicationId, type: "Interview completed", notes: interview.round },
+      });
+      if (createThankYou) {
+        const dueAt = new Date(); dueAt.setDate(dueAt.getDate() + 1);
+        await transaction.applicationFollowUp.create({
+          data: { applicationId, type: "Thank-you note", description: `Send thank-you after ${interview.round}`, dueAt },
+        });
+      }
+    });
+  } else if (operation === "cancel") {
+    await prisma.$transaction([
+      prisma.applicationInterview.update({ where: { id: interview.id }, data: { cancelledAt: new Date() } }),
+      prisma.applicationTimelineEvent.create({ data: { applicationId, type: "Interview cancelled", notes: interview.round } }),
+    ]);
+  } else {
+    const scheduledAt = dateValue(formData, "scheduledAt", interview.scheduledAt);
+    await prisma.$transaction([
+      prisma.applicationInterview.update({
+        where: { id: interview.id },
+        data: {
+          round: optionalText(formData, "round") ?? interview.round,
+          type: optionalText(formData, "type") ?? interview.type,
+          scheduledAt,
+          timezone: optionalText(formData, "timezone"),
+          format: optionalText(formData, "format"),
+          locationUrl: optionalText(formData, "locationUrl"),
+          participants: optionalText(formData, "participants"),
+          durationMinutes: Number(text(formData, "durationMinutes")) || interview.durationMinutes,
+          preparationNotes: optionalText(formData, "preparationNotes"),
+          questionsToAsk: optionalText(formData, "questionsToAsk"),
+        },
+      }),
+      prisma.applicationTimelineEvent.create({
+        data: { applicationId, type: "Interview rescheduled", notes: `${interview.round} moved to ${scheduledAt.toLocaleString("en-US")}.` },
+      }),
+    ]);
+  }
+  revalidateApplication(applicationId);
+}
+
+export async function archiveApplicationAction(formData: FormData) {
+  const applicationId = text(formData, "applicationId");
+  const archived = formData.get("archived") === "true";
+  await prisma.$transaction([
+    prisma.application.update({ where: { id: applicationId }, data: { archived } }),
+    prisma.applicationTimelineEvent.create({
+      data: { applicationId, type: archived ? "Application archived" : "Application restored" },
+    }),
+  ]);
+  revalidateApplication(applicationId);
+  redirect(archived ? "/applications" : `/applications/${applicationId}`);
+}
+
+export async function dismissAttentionAction(formData: FormData) {
+  const applicationId = text(formData, "applicationId");
+  const attentionType = text(formData, "attentionType");
+  if (!attentionType) return;
+  await prisma.applicationAttentionDismissal.upsert({
+    where: { applicationId_attentionType: { applicationId, attentionType } },
+    update: { dismissedAt: new Date() },
+    create: { applicationId, attentionType },
+  });
+  revalidateApplication(applicationId);
+}
+
+export async function editApplicationDetailsAction(formData: FormData) {
+  const applicationId = text(formData, "applicationId");
+  await prisma.$transaction([
+    prisma.application.update({
+      where: { id: applicationId },
+      data: {
+        company: text(formData, "company"),
+        role: text(formData, "role"),
+        location: optionalText(formData, "location"),
+        salary: optionalText(formData, "salary"),
+        applicationUrl: optionalText(formData, "applicationUrl"),
+        industry: optionalText(formData, "industry"),
+        recruiter: optionalText(formData, "recruiter"),
+        hiringManager: optionalText(formData, "hiringManager"),
+        notes: optionalText(formData, "notes"),
+      },
+    }),
+    prisma.applicationTimelineEvent.create({
+      data: { applicationId, type: "Application details updated" },
+    }),
+  ]);
+  revalidateApplication(applicationId);
 }

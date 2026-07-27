@@ -6,9 +6,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   APPLICATION_STAGES,
+  applicationAttentionStates,
   applicationBucket,
   isApplicationStage,
+  isTerminalApplicationStage,
   nextApplicationStage,
+  validApplicationTransition,
 } from "../lib/application-intelligence";
 
 const databases: Array<{ client: PrismaClient; path: string }> = [];
@@ -29,6 +32,35 @@ describe("application lifecycle", () => {
     expect(applicationBucket("Offer")).toBe("Offers");
     expect(applicationBucket("Rejected")).toBe("Closed");
     expect(nextApplicationStage("Preparing")).toBe("Applied");
+    expect(isTerminalApplicationStage("Rejected")).toBe(true);
+    expect(isTerminalApplicationStage("Offer")).toBe(false);
+    expect(validApplicationTransition("Applied", "Recruiter Screen")).toBe(true);
+    expect(validApplicationTransition("Applied", "Preparing")).toBe(false);
+    expect(validApplicationTransition("Panel Interview", "Rejected")).toBe(true);
+  });
+
+  it("derives actionable attention states without inventing activity", () => {
+    const now = new Date("2026-07-27T15:00:00.000Z");
+    const states = applicationAttentionStates({
+      status: "Applied",
+      lastActivityAt: new Date("2026-07-12T15:00:00.000Z"),
+      now,
+      followUps: [
+        { type: "Recruiter follow-up", dueAt: new Date("2026-07-26T15:00:00.000Z"), completedAt: null, cancelledAt: null },
+      ],
+      interviews: [
+        { scheduledAt: new Date("2026-07-27T18:00:00.000Z"), completedAt: null, cancelledAt: null },
+      ],
+      dismissed: [],
+    });
+
+    expect(states.map((state) => state.type)).toEqual(expect.arrayContaining([
+      "follow-up-overdue",
+      "interview-today",
+      "quiet-14",
+    ]));
+    expect(states.find((state) => state.type === "quiet-14")?.dismissible).toBe(true);
+    expect(states.find((state) => state.type === "follow-up-overdue")?.dismissible).toBe(false);
   });
 
   it("preserves opportunity data, status history, timeline, documents, interviews, and reminders", async () => {

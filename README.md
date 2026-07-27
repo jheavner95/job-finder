@@ -12,7 +12,8 @@ macOS. It does not apply to jobs or send candidate information to employers.
 
 ## Features
 
-- Multi-provider ATS discovery
+- Multi-provider ATS discovery for Greenhouse, Lever, Ashby, SmartRecruiters,
+  Workable, Recruitee, Comeet, Personio, and JobScore
 - Scheduled searches
 - Duplicate prevention
 - Deterministic job matching

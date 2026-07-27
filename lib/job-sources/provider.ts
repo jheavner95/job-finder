@@ -10,6 +10,8 @@ import type {
   ProviderValidation,
 } from "./types";
 import { normalizePostingContent } from "../job-content";
+import { ProviderError } from "./errors";
+import { executeProviderRequest } from "./request-policy";
 
 export type JobSourceProvider = {
   readonly id: string;
@@ -55,27 +57,35 @@ export function validateForImport(
 
 export function assertFetchAllowed(context: ProviderContext) {
   if (context.enabled === false) {
-    throw new Error(`Connector for ${context.company} is disabled.`);
+    throw new ProviderError(
+      "INVALID_CONFIGURATION",
+      "The provider connector is disabled.",
+      { company: context.company },
+    );
   }
   if (context.robotsPolicy?.toLowerCase() === "disallow") {
-    throw new Error(`Robots policy disallows fetching ${context.careerUrl}.`);
+    throw new ProviderError(
+      "ROBOTS_DENIED",
+      "The provider robots policy does not permit this request.",
+      { careerUrl: context.careerUrl },
+    );
   }
 }
 
 export async function fetchJson(
+  providerId: string,
   client: FetchClient,
   url: string,
   context: ProviderContext,
 ): Promise<unknown> {
   assertFetchAllowed(context);
-  const response = await client(url, {
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(15_000),
+  return executeProviderRequest({
+    providerId,
+    client,
+    url,
+    context,
+    responseType: "json",
   });
-  if (!response.ok) {
-    throw new Error(`Provider request failed (${response.status}) for ${url}.`);
-  }
-  return response.json();
 }
 
 export function textFromHtml(value: string) {

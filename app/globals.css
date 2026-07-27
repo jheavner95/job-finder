@@ -923,12 +923,68 @@ main { min-width: 0; }
 .insight-methodology summary { padding: 17px 20px; color: var(--green); cursor: pointer; font-weight: 800; }
 .insight-methodology > div { padding: 0 20px 16px; color: var(--muted); font-size: var(--text-label); }
 
+/* AIP-2 — daily CRM workflows */
+.applications-primary-actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin: -12px 0 22px; }
+.application-filter-bar { display: grid; grid-template-columns: 1.4fr repeat(5, minmax(120px, 1fr)); gap: 8px; margin: -8px 0 18px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: #fafbfa; }
+.application-filter-bar label { display: grid; gap: 4px; color: var(--faint); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.application-filter-bar input, .application-filter-bar select { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--white); font: var(--text-label)/1 var(--sans); text-transform: none; }
+.application-filter-bar.density-compact { padding-block: 7px; }
+.application-view-tabs button { padding: 11px 16px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--muted); cursor: pointer; font-size: var(--text-label); font-weight: 800; text-transform: capitalize; }
+.application-view-tabs button[aria-current="page"] { border-color: var(--green); color: var(--forest); }
+.operational-card { cursor: grab; }
+.operational-card:active { cursor: grabbing; }
+.operational-card-top, .kanban-card-actions, .follow-up-actions, .interview-record > div { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.attention-pill { padding: 4px 6px; border-radius: 99px; font-size: 8px; font-weight: 900; text-transform: uppercase; }
+.attention-critical { background: #f3dfdc; color: #8d4037; }
+.attention-warning { background: #f6ead4; color: #8a5b20; }
+.attention-info { background: #e7eef4; color: #45647e; }
+.operational-card dl { grid-template-columns: 1fr; }
+.operational-card dl div { display: flex; justify-content: space-between; gap: 7px; }
+.operational-card dl dd { max-width: 115px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+.kanban-card-actions { margin-top: 12px; }
+.kanban-card-actions button { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 4px; background: #fafbfa; color: var(--green); cursor: pointer; }
+.kanban-card-actions button:disabled { opacity: .35; cursor: not-allowed; }
+.kanban-card-actions a { color: var(--green); font-size: 11px; font-weight: 800; }
+.kanban-drop-target { outline: 3px solid #8caf99; outline-offset: -3px; background: #e8f1eb !important; }
+.kanban-pending { opacity: .7; pointer-events: none; }
+.application-command-facts { display: flex; gap: 16px; color: #c4d1ca; font-size: 10px; }
+.application-attention-list { display: flex; gap: 7px; flex-wrap: wrap; margin: -16px 0 24px; }
+.application-attention-list article { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; font-size: 10px; }
+.application-attention-list button { border: 0; background: none; color: inherit; cursor: pointer; font-weight: 800; text-decoration: underline; }
+.application-hero-actions { flex-wrap: wrap; justify-content: flex-end; }
+.application-hero-actions form { margin: 0; }
+.next-interview-card > div { display: flex; gap: 9px; }
+.next-interview-card > div a { color: var(--green); font-size: 10px; font-weight: 800; }
+.follow-up-actions { flex-wrap: wrap; justify-content: flex-end; }
+.follow-up-actions form, .interview-record form { margin: 0; }
+.reminder-center-page { max-width: 1050px; }
+.reminder-groups { display: grid; gap: 24px; }
+.reminder-groups > section > header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
+.reminder-groups > section > header h2 { margin: 0; font: 500 25px/1.1 var(--serif); }
+.reminder-groups > section > header span { color: var(--faint); }
+.reminder-groups > section > div { border: 1px solid var(--line); border-radius: 8px; background: var(--white); }
+.reminder-groups article { display: grid; grid-template-columns: minmax(260px, 1fr) 180px auto auto; gap: 18px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.reminder-groups article:last-child { border-bottom: 0; }
+.reminder-groups article > div:first-child { display: grid; gap: 3px; }
+.reminder-groups article span { color: var(--faint); font-size: 9px; text-transform: uppercase; }
+.reminder-groups article h3 { margin: 0; font-size: var(--text-label); }
+.reminder-groups article p { margin: 0; color: var(--muted); font-size: var(--text-label); }
+.reminder-groups article time { color: var(--muted); font-size: 11px; }
+.reminder-actions { display: flex; gap: 5px; }
+.reminder-actions form { margin: 0; }
+.reminder-groups article > a { color: var(--green); font-size: 10px; font-weight: 800; }
+.reminder-empty { margin: 0; padding: 25px; color: var(--muted); text-align: center; }
+.dashboard-attention { color: #9a5d27 !important; font-size: 9px !important; font-weight: 800; text-transform: uppercase; }
+
 @media (max-width: 900px) {
   .insight-metric-grid { grid-template-columns: 1fr 1fr; }
   .factual-count-grid, .interview-type-grid { grid-template-columns: repeat(3, 1fr); }
   .factual-count-grid > div:nth-child(4), .interview-type-grid article:nth-child(4), .interview-type-grid article:nth-child(7) { border-left: 0; }
   .insights-heading { align-items: flex-start; flex-direction: column; }
   .trend-chart { overflow-x: auto; }
+  .application-filter-bar { grid-template-columns: 1fr 1fr; }
+  .reminder-groups article { grid-template-columns: 1fr auto; }
+  .reminder-actions { grid-column: 1 / -1; }
 }
 .company-snapshot { display: grid; grid-template-columns: 1fr 1.2fr auto; gap: 35px; align-items: center; padding: 26px 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); }
 .company-snapshot h2 { margin-bottom: 8px; }

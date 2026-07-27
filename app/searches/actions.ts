@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/db";
 import { nextRunAt, SCHEDULE_TYPES } from "@/lib/scheduling/schedule";
+import { getOperationalCapability } from "@/lib/job-sources/capabilities";
 
 const savedSearchSchema = z.object({
   connectorId: z.string().min(1),
@@ -38,6 +39,19 @@ export async function updateSavedSearchAction(formData: FormData) {
     intervalMinutes: Number(formData.get("intervalMinutes") || 60),
   });
   if (!parsed.success) redirect("/searches?error=invalid-search");
+  const connector = await prisma.companyConnector.findUnique({
+    where: { id: parsed.data.connectorId },
+    select: { atsType: true },
+  });
+  if (!connector) redirect("/searches?error=invalid-search");
+  const capability = getOperationalCapability(connector.atsType);
+  if (
+    capability.pollingFloorMs > 0
+    && parsed.data.scheduleType === "Interval"
+    && (parsed.data.intervalMinutes ?? 0) * 60_000 < capability.pollingFloorMs
+  ) {
+    redirect("/searches?error=jobscore-polling-limit");
+  }
 
   const schedule = {
     scheduleType: parsed.data.scheduleType,

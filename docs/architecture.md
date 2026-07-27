@@ -46,6 +46,55 @@ Fingerprinting applies deterministic normalization to company, title, location, 
 
 Fingerprint collisions and semantic mismatches remain possible. Source identifiers improve precision but can create false negatives when the same posting is syndicated under different IDs.
 
+Provider connectors also preserve the provider's external job identifier in
+`Job.sourceJobId`. For certified feeds, `(source, company, sourceJobId)` is a
+database-enforced primary identity. Canonical URL and fingerprint checks remain
+secondary duplicate defenses.
+
+## Discovery provider boundary
+
+Every provider implements the shared discover, fetch, normalize, validate, and
+health contract. Provider-specific transports stop at the canonical import
+boundary; matching, scoring, duplicate handling, and persistence stay in the
+shared pipeline.
+
+Personio uses its documented employer-scoped XML feed with one deterministic
+locale. Tenant robots policy is checked against `/xml` before discovery and
+cached for the batch. See [Personio public connector](personio-connector.md).
+
+JobScore uses its documented employer-scoped JSON feed. It preserves JobScore's
+position ID, detail URL, application URL, department, and source dates without
+inventing absent values. Discovery defaults to daily, enforces a one-hour
+minimum polling interval, honors `Retry-After`, and uses bounded exponential
+backoff with jitter. See [JobScore public connector](jobscore-connector.md).
+
+The cross-provider certification status, identified drift, and prerequisites
+for authenticated connectors are recorded in the
+[public connector architecture review](public-connector-architecture-review.md).
+
+## Consolidated Discovery Platform
+
+DP-2.2P establishes one permanent connector framework:
+
+- `capabilities.ts` declares robots targets, timeouts, retry policy, polling
+  floors, default schedules, completeness, deletion, pagination, and
+  authentication support.
+- `request-policy.ts` owns every provider request, timeout classification,
+  Retry-After handling, bounded exponential backoff, jitter, and retry count.
+- `errors.ts` defines stable provider error codes and safe diagnostic payloads.
+- complete discovery results carry the full provider ID set; successful
+  complete feeds reconcile `lastSeenAt`, `closedAt`, and
+  `reconciliationReason`, while failed or blocked runs never close jobs.
+- the universal provider contract harness is mandatory for every registered
+  connector and verifies canonical identity, normalization, diagnostics, feed
+  completeness, and operational capability declarations.
+
+Provider transports remain responsible only for endpoint construction, schema
+parsing, and mapping documented fields. Execution, policy, diagnostics,
+identity, persistence, and reconciliation are platform responsibilities.
+
 ## Deliberate boundaries
 
-Version 1 is local, private, and single-user. It contains no ingestion, scraping, scheduling, authentication, external AI, automatic applications, or employer communication.
+The application remains local, private, and single-user. Discovery is limited
+to certified public or explicitly authorized provider interfaces. It contains
+no external authentication, automatic applications, or employer communication.

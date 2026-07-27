@@ -1,4 +1,6 @@
 import type { ProviderContext } from "../types";
+import { ProviderError } from "../errors";
+import { executeProviderRequest } from "../request-policy";
 import { connectorToken, joinedText, stringValue } from "./provider-utils";
 import { JsonJobProvider, nestedString, type GenericPosting } from "./json-provider";
 
@@ -12,22 +14,30 @@ export class AshbyProvider extends JsonJobProvider {
 
   protected postings(payload: unknown) {
     const jobs = (payload as { jobs?: unknown[] })?.jobs;
-    return Array.isArray(jobs)
-      ? jobs.filter((job) => (job as { isListed?: boolean }).isListed !== false)
-      : [];
+    if (!Array.isArray(jobs)) {
+      throw new ProviderError("SCHEMA_DRIFT", "Ashby feed jobs must be a list.");
+    }
+    return jobs.filter((job) => (job as { isListed?: boolean }).isListed !== false);
   }
 
   protected async fetchFromBoard(externalId: string, context: ProviderContext) {
-    const response = await this.client(this.discoveryUrl(context), {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(15_000),
+    const payload = await executeProviderRequest({
+      providerId: this.id,
+      client: this.client,
+      url: this.discoveryUrl(context),
+      context,
+      responseType: "json",
     });
-    if (!response.ok) throw new Error(`Ashby request failed (${response.status}).`);
-    const payload = await response.json();
     const job = this.postings(payload).find(
       (item) => stringValue((item as Record<string, unknown>).id) === externalId,
     );
-    if (!job) throw new Error(`Ashby posting "${externalId}" was not found.`);
+    if (!job) {
+      throw new ProviderError(
+        "DELETED",
+        "The provider posting is no longer available.",
+        { providerId: this.id, sourceJobId: externalId },
+      );
+    }
     return job;
   }
 

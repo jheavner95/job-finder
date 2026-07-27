@@ -6,6 +6,7 @@ import {
   nestedString,
   type GenericPosting,
 } from "./json-provider";
+import { ProviderError } from "../errors";
 
 export class LeverProvider extends JsonJobProvider {
   readonly id = "lever";
@@ -16,7 +17,10 @@ export class LeverProvider extends JsonJobProvider {
   }
 
   protected postings(payload: unknown) {
-    return Array.isArray(payload) ? payload : [];
+    if (!Array.isArray(payload)) {
+      throw new ProviderError("SCHEMA_DRIFT", "Lever feed must be a list of postings.");
+    }
+    return payload;
   }
 
   protected fetchUrl(job: { externalId: string }, context: ProviderContext) {

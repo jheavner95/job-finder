@@ -38,6 +38,10 @@ export type ProviderContext = {
   rateLimit?: number | null;
 };
 
+export const PERSONIO_LOCALES = ["de", "en", "fr", "es", "nl", "it", "pt"] as const;
+export type PersonioLocale = (typeof PERSONIO_LOCALES)[number];
+export const DEFAULT_PERSONIO_LOCALE: PersonioLocale = "en";
+
 export const DEFAULT_PRODUCT_DESIGN_SEARCH: JobSearchCriteria = {
   titles: [
     "Senior Product Designer",
@@ -103,6 +107,10 @@ export type DiscoveryDiagnostics = {
 export type ProviderDiscoveryResult = {
   jobs: DiscoveredJob[];
   diagnostics: DiscoveryDiagnostics;
+  feed: {
+    complete: boolean;
+    sourceJobIds: string[];
+  };
 };
 
 export type CanonicalJobPosting = {

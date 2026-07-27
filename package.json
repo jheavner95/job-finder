@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "fast-xml-parser": "^5.10.1",
     "mammoth": "^1.12.0",
     "next": "^16.2.11",
     "pdf-parse": "^2.4.5",

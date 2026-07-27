@@ -57,6 +57,8 @@ describe("job source engine", () => {
         "smartrecruiters",
         "recruitee",
         "comeet",
+        "personio",
+        "jobscore",
         "workday",
       ]);
   });
@@ -88,6 +90,7 @@ describe("job source engine", () => {
       source: "Greenhouse",
       salary: "$180k–$220k",
       employmentType: "Full-time",
+      providerExternalId: "123",
     });
 
     const preview = createJobImportPreview(normalized);
@@ -116,7 +119,7 @@ describe("job source engine", () => {
     await expect(provider.discover(
       { titles: [], locations: [] },
       { ...context, robotsPolicy: "disallow" },
-    )).rejects.toThrow(/Robots policy/);
+    )).rejects.toMatchObject({ code: "ROBOTS_DENIED" });
     expect((await provider.health({ ...context, enabled: false })).status)
       .toBe("Disabled");
   });
@@ -196,6 +199,7 @@ describe("job source engine", () => {
       context,
     );
     expect(normalized.url).toBe(offer.careers_url);
+    expect(normalized.providerExternalId).toBe("staff-product-designer");
     expect(provider.validate(normalized).valid).toBe(true);
   });
 
@@ -229,6 +233,7 @@ describe("job source engine", () => {
     );
     expect(provider.validate(normalized).valid).toBe(true);
     expect(normalized.url).toBe(position.url_recruit_hosted_page);
+    expect(normalized.providerExternalId).toBe("87.405");
   });
 
   it("uses the most specific robots rule and reads crawl delay", () => {
@@ -239,6 +244,7 @@ describe("job source engine", () => {
       allowed: true,
       policy: "allow",
       crawlDelay: 2_000,
+      reason: "robots.txt permits /v1/boards/example/jobs.",
     });
     expect(evaluateRobots(
       "User-agent: *\nDisallow: /v1/boards/",
@@ -268,6 +274,7 @@ describe("job source engine", () => {
     const normalized = provider.normalize(posting, context);
     expect(provider.validate(normalized).valid).toBe(true);
     expect(normalized.url).toBe(leverJob.hostedUrl);
+    expect(normalized.providerExternalId).toBe("lever-123");
     expect(normalized.description).toContain("8 years of product design experience");
     expect(createJobImportPreview(normalized).evaluation.score).toBeGreaterThan(0);
   });
@@ -322,6 +329,34 @@ describe("job source engine", () => {
     expect(provider.validate(normalized).valid).toBe(true);
     expect(normalized.url).toBe(
       "https://jobs.smartrecruiters.com/ExampleCo/744000123-senior-product-designer",
+    );
+  });
+
+  it("fetches SmartRecruiters details from the canonical posting endpoint", async () => {
+    const posting = {
+      id: "744000123",
+      name: "Senior Product Designer",
+      company: { identifier: "ExampleCo" },
+      location: { fullLocation: "Remote, United States" },
+      jobAd: { job: { text: "Own product design strategy." } },
+    };
+    const client = vi.fn()
+      .mockImplementationOnce(() => response({ content: [posting] }))
+      .mockImplementationOnce(() => response(posting));
+    const provider = new SmartRecruitersProvider(client);
+    const smartContext = {
+      ...context,
+      connectorKey: "ExampleCo",
+      careerUrl: "https://jobs.smartrecruiters.com/ExampleCo",
+    };
+    const [job] = await provider.discover(
+      { titles: [], locations: [] },
+      smartContext,
+    );
+    await provider.fetch(job, smartContext);
+    expect(client).toHaveBeenLastCalledWith(
+      "https://api.smartrecruiters.com/v1/companies/ExampleCo/postings/744000123",
+      expect.any(Object),
     );
   });
 

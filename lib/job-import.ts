@@ -29,6 +29,11 @@ export const jobImportSchema = z.object({
   salary: optionalText,
   location: optionalText,
   employmentType: optionalText,
+  department: z.string().trim().max(500).optional(),
+  postedAt: z.coerce.date().optional(),
+  sourceUpdatedAt: z.coerce.date().optional(),
+  applicationUrl: z.string().trim().url().max(2_000).optional(),
+  providerExternalId: z.string().trim().max(300).optional(),
 });
 
 export type JobImportInput = z.infer<typeof jobImportSchema>;
@@ -43,9 +48,14 @@ export type NormalizedJobImport = {
   location: string | null;
   remoteStatus: string | null;
   employmentType: string | null;
+  department: string | null;
+  postedAt: Date | null;
+  sourceUpdatedAt: Date | null;
+  applicationUrl: string | null;
   requirements: string[];
   concerns: string[];
   fingerprint: string;
+  providerExternalId: string | null;
 };
 
 export type JobImportPreview = {
@@ -215,6 +225,10 @@ export function normalizeJobImport(input: JobImportInput): NormalizedJobImport {
     location: location || null,
     remoteStatus: remoteStatus(location) || null,
     employmentType: cleanWhitespace(input.employmentType) || null,
+    department: cleanWhitespace(input.department ?? "") || null,
+    postedAt: input.postedAt ?? null,
+    sourceUpdatedAt: input.sourceUpdatedAt ?? null,
+    applicationUrl: input.applicationUrl?.trim() || null,
     requirements: selectLines(
       lines,
       [
@@ -230,6 +244,7 @@ export function normalizeJobImport(input: JobImportInput): NormalizedJobImport {
       5,
     ),
     fingerprint,
+    providerExternalId: cleanWhitespace(input.providerExternalId ?? "") || null,
   };
 }
 

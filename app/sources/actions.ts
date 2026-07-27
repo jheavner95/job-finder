@@ -10,8 +10,10 @@ import { EMPTY_JOB_SEARCH } from "@/lib/job-sources/types";
 import { detectCompanySource, type DetectedCompanySource } from "@/lib/job-sources/detection";
 import { checkRobots } from "@/lib/job-sources/robots";
 import { DiscoveryScheduler } from "@/lib/scheduling/discovery-scheduler";
+import { nextRunAt } from "@/lib/scheduling/schedule";
 import { GreenhouseProvider } from "@/lib/job-sources/providers/greenhouse";
 import { DiscoveryService } from "@/lib/job-sources/services/discovery-service";
+import { getOperationalCapability } from "@/lib/job-sources/capabilities";
 
 export type CompanyValidationState = {
   status: "idle" | "verified" | "blocked";
@@ -67,7 +69,15 @@ export async function validateCompanySourceAction(
     if (!pageResponse.ok) throw new Error(`Career page returned ${pageResponse.status}.`);
     checks.unshift({ label: "Career page reachable", detail: "Public page responded successfully.", ok: true });
 
-    const robots = await checkRobots(`${url.origin}/robots.txt`, url.pathname);
+    const robotsUrl = detection.providerId === "jobscore"
+      ? "https://careers.jobscore.com/robots.txt"
+      : `${url.origin}/robots.txt`;
+    const robotsPath = detection.providerId === "personio"
+      ? "/xml"
+      : detection.providerId === "jobscore"
+        ? `/jobs/${encodeURIComponent(detection.connectorKey)}/feed.json`
+        : url.pathname;
+    const robots = await checkRobots(robotsUrl, robotsPath);
     checks.push({
       label: "Robots access",
       detail: robots.allowed ? "Public discovery path is permitted." : robots.reason,
@@ -177,6 +187,15 @@ export async function addCompanyConnectorAction(formData: FormData) {
     }
   }
 
+  const operationalCapability = getOperationalCapability(parsed.data.providerId);
+  const defaultSchedule = operationalCapability.defaultSchedule === "Daily"
+    ? {
+        scheduleType: "Daily",
+        timeOfDay: "08:00",
+        nextRunAt: nextRunAt({ scheduleType: "Daily", timeOfDay: "08:00" }),
+      }
+    : { scheduleType: "Manual", timeOfDay: null, nextRunAt: null };
+
   await prisma.companyConnector.upsert({
     where: { company: parsed.data.company },
     update: {
@@ -190,8 +209,8 @@ export async function addCompanyConnectorAction(formData: FormData) {
       notes: parsed.data.notes || null,
       schedule: {
         upsert: {
-          create: { scheduleType: "Manual" },
-          update: {},
+          create: defaultSchedule,
+          update: defaultSchedule,
         },
       },
     },
@@ -207,7 +226,7 @@ export async function addCompanyConnectorAction(formData: FormData) {
       searchCriteria: EMPTY_JOB_SEARCH,
       notes: parsed.data.notes || null,
       schedule: {
-        create: { scheduleType: "Manual" },
+        create: defaultSchedule,
       },
     },
   });

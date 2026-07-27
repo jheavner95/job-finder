@@ -1,6 +1,7 @@
 import type { ProviderContext } from "../types";
 import { connectorToken, joinedText, stringValue } from "./provider-utils";
 import { contentText, JsonJobProvider, nestedString, type GenericPosting } from "./json-provider";
+import { ProviderError } from "../errors";
 
 function slug(value: string) {
   return value
@@ -21,11 +22,16 @@ export class SmartRecruitersProvider extends JsonJobProvider {
 
   protected postings(payload: unknown) {
     const content = (payload as { content?: unknown[] })?.content;
-    return Array.isArray(content) ? content : [];
+    if (!Array.isArray(content)) {
+      throw new ProviderError("SCHEMA_DRIFT", "SmartRecruiters feed content must be a list.");
+    }
+    return content;
   }
 
   protected fetchUrl(job: { externalId: string }, context: ProviderContext) {
-    return `${this.discoveryUrl(context)}/${encodeURIComponent(job.externalId)}`;
+    return `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(
+      connectorToken(context),
+    )}/postings/${encodeURIComponent(job.externalId)}`;
   }
 
   protected mapPosting(payload: unknown): GenericPosting {

@@ -12,7 +12,13 @@ import type {
   ProviderContext,
   DiscoveryDiagnostics,
 } from "../types";
-import { configuredHealth, connectorToken, stringValue } from "./provider-utils";
+import { ProviderError } from "../errors";
+import {
+  configuredHealth,
+  connectorToken,
+  stringValue,
+  validateProviderRecords,
+} from "./provider-utils";
 
 type GreenhouseJob = {
   id?: number;
@@ -98,11 +104,20 @@ export class GreenhouseProvider implements JobSourceProvider {
   async discoverDetailed(criteria: JobSearchCriteria, context: ProviderContext) {
     const board = encodeURIComponent(connectorToken(context));
     const payload = await fetchJson(
+      this.id,
       this.client,
       `https://boards-api.greenhouse.io/v1/boards/${board}/jobs?content=true`,
       context,
     ) as { jobs?: GreenhouseJob[] };
-    const allJobs = payload.jobs ?? [];
+    if (!Array.isArray(payload.jobs)) {
+      throw new ProviderError("SCHEMA_DRIFT", "Greenhouse feed jobs must be a list.");
+    }
+    const allJobs = payload.jobs;
+    validateProviderRecords(this.id, allJobs.map((job) => ({
+      id: String(job.id ?? ""),
+      title: stringValue(job.title),
+      url: stringValue(job.absolute_url),
+    })));
     const diagnostics: DiscoveryDiagnostics = {
       totalJobsDiscovered: allJobs.length,
       titleMatches: 0,
@@ -147,12 +162,20 @@ export class GreenhouseProvider implements JobSourceProvider {
         discoveredVia: "canonical",
       }),
     );
-    return { jobs, diagnostics };
+    return {
+      jobs,
+      diagnostics,
+      feed: {
+        complete: true,
+        sourceJobIds: allJobs.map((job) => String(job.id ?? "")).filter(Boolean),
+      },
+    };
   }
 
   async fetch(job: DiscoveredJob, context: ProviderContext) {
     const board = encodeURIComponent(connectorToken(context));
     const payload = await fetchJson(
+      this.id,
       this.client,
       `https://boards-api.greenhouse.io/v1/boards/${board}/jobs/${encodeURIComponent(job.externalId)}`,
       context,
@@ -184,6 +207,7 @@ export class GreenhouseProvider implements JobSourceProvider {
       salary: meta(/salary|compensation/i),
       location: stringValue(job.location?.name),
       employmentType: meta(/employment|commitment|type/i),
+      providerExternalId: posting.externalId,
     };
   }
 

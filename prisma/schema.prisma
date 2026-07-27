@@ -44,6 +44,7 @@ model Job {
   sourceJobId           String?
   fingerprint           String   @unique
   title                 String
+  department            String?
   location              String?
   remoteStatus          String?
   employmentType        String?
@@ -52,14 +53,17 @@ model Job {
   compensationCurrency  String?
   compensationText      String?
   sourceUrl              String
+  applicationUrl         String?
   originalSourceText     String
   normalizedDescription String?
   normalizedRequirements Json?
   normalizedConcerns     Json?
   postedAt               DateTime?
+  sourceUpdatedAt        DateTime?
   firstSeenAt            DateTime @default(now())
   lastSeenAt             DateTime @default(now())
   closedAt               DateTime?
+  reconciliationReason   String?
   status                 JobStatus @default(NEW)
   isSynthetic            Boolean @default(false)
   companyId              String
@@ -78,6 +82,7 @@ model Job {
   @@index([companyId])
   @@index([status])
   @@index([postedAt])
+  @@unique([sourceId, companyId, sourceJobId])
 }
 
 model JobEvaluation {
@@ -131,7 +136,11 @@ model Application {
   sourceProvider    String?
   industry          String?
   outcome           String?
+  outcomeDate       DateTime?
   rejectionReason   String?
+  futureEligibility String?
+  startDate         DateTime?
+  compensationNotes String?
   archived          Boolean  @default(false)
   notes             String?
   nextStepAt        DateTime?
@@ -144,6 +153,7 @@ model Application {
   documents         ApplicationDocument[]
   interviews        ApplicationInterview[]
   followUps         ApplicationFollowUp[]
+  attentionDismissals ApplicationAttentionDismissal[]
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -189,6 +199,7 @@ model ApplicationContact {
   application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   timelineEvents ApplicationTimelineEvent[]
   communications ApplicationCommunication[]
+  followUps       ApplicationFollowUp[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -233,9 +244,17 @@ model ApplicationInterview {
   participants     String?
   scheduledAt      DateTime
   durationMinutes  Int?
+  timezone         String?
+  format           String?
+  locationUrl      String?
   preparationNotes String?
+  questionsToAsk   String?
+  postInterviewNotes String?
   feedback         String?
   outcome          String?
+  followUpRequired Boolean @default(false)
+  completedAt      DateTime?
+  cancelledAt      DateTime?
   applicationId    String
   application      Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   createdAt        DateTime @default(now())
@@ -248,14 +267,31 @@ model ApplicationFollowUp {
   id            String   @id @default(cuid())
   type          String
   description   String
+  notes         String?
   dueAt         DateTime
   completedAt   DateTime?
+  snoozedFrom   DateTime?
+  cancelledAt   DateTime?
   applicationId String
   application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  contactId     String?
+  contact       ApplicationContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([dueAt, completedAt])
+  @@index([applicationId])
+  @@index([contactId])
+}
+
+model ApplicationAttentionDismissal {
+  id            String   @id @default(cuid())
+  attentionType String
+  dismissedAt   DateTime @default(now())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, attentionType])
   @@index([applicationId])
 }
 
@@ -347,6 +383,9 @@ model ConnectorCrawl {
   failures      Int      @default(0)
   durationMs    Int?
   lastError     String?
+  errorCode     String?
+  providerMessage String?
+  diagnosticContext Json?
   metadata      Json?
   connectorId   String
   connector     CompanyConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
@@ -356,6 +395,7 @@ model ConnectorCrawl {
   @@index([connectorId, startedAt])
   @@index([status])
   @@index([batchId])
+  @@index([errorCode])
 }
 
 model ConnectorSchedule {

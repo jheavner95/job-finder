@@ -9,6 +9,7 @@ import {
 import { presentDashboard } from "@/lib/dashboard-presentation";
 import { getDashboardSummary } from "@/lib/queries";
 import { prisma } from "@/lib/db";
+import { applicationAttentionStates } from "@/lib/application-intelligence";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,8 @@ export default async function DashboardPage() {
       include: {
         followUps: { where: { completedAt: null }, orderBy: { dueAt: "asc" } },
         interviews: { orderBy: { scheduledAt: "asc" } },
+        timeline: { orderBy: { eventAt: "desc" }, take: 1 },
+        attentionDismissals: true,
       },
       orderBy: { updatedAt: "desc" },
     }),
@@ -221,7 +224,7 @@ export default async function DashboardPage() {
             {applicationsInProgress.slice(0, 6).map((application) => (
               <li key={application.id}>
                 <span className="application-state">{application.status}</span>
-                <div><strong>{application.role}</strong><span>{application.company}</span></div>
+                <div><strong>{application.role}</strong><span>{application.company}</span>{applicationAttentionStates({ status: application.status, lastActivityAt: application.timeline[0]?.eventAt ?? application.updatedAt, followUps: application.followUps, interviews: application.interviews, dismissed: application.attentionDismissals.map((item) => item.attentionType) })[0] && <small className="dashboard-attention">{applicationAttentionStates({ status: application.status, lastActivityAt: application.timeline[0]?.eventAt ?? application.updatedAt, followUps: application.followUps, interviews: application.interviews, dismissed: application.attentionDismissals.map((item) => item.attentionType) })[0].label}</small>}</div>
                 <Link href={`/applications/${application.id}`} aria-label={`View application activity for ${application.role} at ${application.company}`}>View application <span aria-hidden="true">→</span></Link>
               </li>
             ))}

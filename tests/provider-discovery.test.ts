@@ -29,6 +29,56 @@ afterEach(async () => {
 });
 
 describe("provider discovery persistence", () => {
+  it.each([
+    ["greenhouse", "example", "https://boards.greenhouse.io/example", "https://boards-api.greenhouse.io/robots.txt", "/v1/boards/example/jobs"],
+    ["lever", "example", "https://jobs.lever.co/example", "https://api.lever.co/robots.txt", "/v0/postings/example"],
+    ["ashby", "example", "https://jobs.ashbyhq.com/example", "https://api.ashbyhq.com/robots.txt", "/posting-api/job-board/example"],
+    ["smartrecruiters", "Example", "https://jobs.smartrecruiters.com/Example", "https://api.smartrecruiters.com/robots.txt", "/v1/companies/Example/postings"],
+    ["workable", "example", "https://apply.workable.com/example", "https://www.workable.com/robots.txt", "/api/accounts/example"],
+    ["recruitee", "example", "https://example.recruitee.com", "https://example.recruitee.com/robots.txt", "/api/offers/"],
+    ["comeet", "30.005:PUBLIC_TOKEN", "https://www.comeet.co/jobs/example", "https://www.comeet.co/robots.txt", "/careers-api/2.0/company/30.005/positions"],
+    ["personio", "example", "https://example.jobs.personio.de", "https://example.jobs.personio.de/robots.txt", "/xml"],
+    ["jobscore", "example", "https://careers.jobscore.com/jobs/example", "https://careers.jobscore.com/robots.txt", "/jobs/example/feed.json"],
+  ])(
+    "validates %s robots policy against the exact employer feed path",
+    async (providerId, connectorKey, careerUrl, robotsUrl, feedPath) => {
+      const database = testDatabase();
+      const connector = await database.companyConnector.create({
+        data: {
+          company: `${providerId} robots ${randomUUID()}`,
+          careerUrl,
+          atsType: providerId,
+          connectorKey,
+          enabled: true,
+        },
+      });
+      const client = vi.fn<typeof fetch>(async () =>
+        new Response(`User-agent: *\nDisallow: ${feedPath}`, { status: 200 }));
+      await expect(new ProviderDiscoveryRunner(
+        database,
+        providerId,
+        client,
+        undefined,
+        { connectorIds: [connector.id] },
+      ).run()).resolves.toMatchObject({ failures: 1 });
+      expect(client).toHaveBeenCalledWith(
+        robotsUrl,
+        expect.objectContaining({
+          headers: { "User-Agent": "job-search-intelligence/1.0" },
+        }),
+      );
+      await expect(database.connectorCrawl.findFirstOrThrow({
+        where: { connectorId: connector.id },
+      })).resolves.toMatchObject({
+        status: "Blocked",
+        failures: 1,
+        errorCode: "ROBOTS_DENIED",
+        providerMessage: "The provider robots policy does not permit this request.",
+        diagnosticContext: { path: feedPath },
+      });
+    },
+  );
+
   it("runs multiple enabled Greenhouse boards in one discovery batch", async () => {
     const database = testDatabase();
     const suffix = randomUUID();

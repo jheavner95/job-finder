@@ -68,7 +68,7 @@ export function evaluateRobots(
     policy: allowed ? "allow" : "disallow",
     crawlDelay,
     reason: allowed
-      ? "robots.txt permits the Greenhouse Job Board API path."
+      ? `robots.txt permits ${path}.`
       : `robots.txt disallows ${winner.path}.`,
   };
 }

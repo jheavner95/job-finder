@@ -1,0 +1,2 @@
+ALTER TABLE "Job" ADD COLUMN "department" TEXT;
+ALTER TABLE "Job" ADD COLUMN "sourceUpdatedAt" DATETIME;

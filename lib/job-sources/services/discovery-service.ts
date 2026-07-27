@@ -71,6 +71,10 @@ export class DiscoveryService {
             closedJobs: 0,
             excludedJobs: [],
           },
+          feed: {
+            complete: false,
+            sourceJobIds: [],
+          },
         };
     await this.persistConnector(providerId, context, {
       health: "Healthy",

@@ -5,40 +5,17 @@ import { jobSourceRegistry, type JobSourceRegistry } from "../registry";
 import type { JobSearchCriteria, ProviderContext } from "../types";
 import { DEFAULT_PRODUCT_DESIGN_SEARCH, type CrawlSummary } from "../types";
 import { DiscoveryService } from "./discovery-service";
-
-const ROBOTS_TARGETS: Record<string, { url: string; path: string }> = {
-  greenhouse: {
-    url: "https://boards-api.greenhouse.io/robots.txt",
-    path: "/v1/boards/",
-  },
-  lever: {
-    url: "https://api.lever.co/robots.txt",
-    path: "/v0/postings/",
-  },
-  ashby: {
-    url: "https://jobs.ashbyhq.com/robots.txt",
-    path: "/",
-  },
-  smartrecruiters: {
-    url: "https://api.smartrecruiters.com/robots.txt",
-    path: "/v1/companies/",
-  },
-  workable: {
-    url: "https://www.workable.com/robots.txt",
-    path: "/api/accounts/",
-  },
-  recruitee: {
-    url: "https://recruitee.com/robots.txt",
-    path: "/api/offers/",
-  },
-  comeet: {
-    url: "https://www.comeet.co/robots.txt",
-    path: "/careers-api/2.0/company/",
-  },
-};
+import { getOperationalCapability } from "../capabilities";
+import { errorPersistence } from "../errors";
+import {
+  reconcileCompleteFeed,
+  reconcileExplicitDeletion,
+} from "./feed-reconciliation";
 
 const WORKDAY_PUBLIC_ACCESS_REASON =
   "Workday connector stopped: Workday does not document a supported unauthenticated public jobs API; its official tenant REST and SOAP APIs require authorized tenant access, and the career-site /wday/cxs route is undocumented. No bypass attempted.";
+export const JOBSCORE_MINIMUM_POLL_INTERVAL_MS =
+  getOperationalCapability("jobscore").pollingFloorMs;
 
 function criteriaFrom(value: Prisma.JsonValue | null): JobSearchCriteria {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -93,15 +70,15 @@ export class ProviderDiscoveryRunner {
     private readonly database: PrismaClient,
     private readonly providerId: string,
     private readonly client: typeof fetch = fetch,
-    registry: JobSourceRegistry = jobSourceRegistry,
+    private readonly registry: JobSourceRegistry = jobSourceRegistry,
     private readonly options: {
       connectorIds?: string[];
       batchId?: string;
       trigger?: "manual" | "scheduled";
     } = {},
   ) {
-    registry.get(providerId);
-    this.discovery = new DiscoveryService(database, registry);
+    this.registry.get(providerId);
+    this.discovery = new DiscoveryService(database, this.registry);
   }
 
   async run(): Promise<CrawlSummary> {
@@ -133,32 +110,9 @@ export class ProviderDiscoveryRunner {
         "Warning",
       );
     }
-    const target = this.providerId === "recruitee" && connectors[0]
-      ? {
-          url: `https://${encodeURIComponent(connectors[0].connectorKey)}.recruitee.com/robots.txt`,
-          path: "/api/offers/",
-        }
-      : ROBOTS_TARGETS[this.providerId];
-    if (!target) {
-      return this.blockAll(
-        connectors,
-        summary,
-        `Robots policy target is not configured for ${this.providerId}.`,
-        runStarted,
-      );
-    }
+    const capability = getOperationalCapability(this.providerId);
 
-    let robots;
-    try {
-      robots = await checkRobots(target.url, target.path, this.client);
-    } catch (error) {
-      return this.blockAll(
-        connectors,
-        summary,
-        error instanceof Error ? error.message : "Robots check failed.",
-        runStarted,
-      );
-    }
+    const robotsCache = new Map<string, Awaited<ReturnType<typeof checkRobots>>>();
 
     for (const connector of connectors) {
       const startedAt = new Date();
@@ -176,6 +130,47 @@ export class ProviderDiscoveryRunner {
       });
       summary.companiesProcessed += 1;
 
+      if (
+        capability.pollingFloorMs > 0
+        && connector.lastSuccessfulFetch
+        && Date.now() - connector.lastSuccessfulFetch.getTime()
+          < capability.pollingFloorMs
+      ) {
+        await this.finish(connector, crawl.id, startedAt, {
+          status: "SkippedRateLimit",
+          failures: 0,
+          lastError: null,
+          health: "Healthy",
+          robotsPolicy: connector.robotsPolicy ?? "cached",
+          skipReason: `${this.providerId} polling floor has not elapsed.`,
+        });
+        continue;
+      }
+
+      const target = capability.robotsTarget(connector);
+      const cacheKey = `${target.url}|${target.path}`;
+      let robots = robotsCache.get(cacheKey);
+      if (!robots) {
+        try {
+          robots = await checkRobots(target.url, target.path, this.client);
+          robotsCache.set(cacheKey, robots);
+        } catch (error) {
+          const typed = errorPersistence(error);
+          await this.finish(connector, crawl.id, startedAt, {
+            status: "Blocked",
+            failures: 1,
+            lastError: typed.providerMessage,
+            errorCode: typed.errorCode,
+            providerMessage: typed.providerMessage,
+            diagnosticContext: typed.diagnosticContext,
+            health: "Error",
+            robotsPolicy: "unverified",
+          });
+          summary.failures += 1;
+          continue;
+        }
+      }
+
       if (!robots.allowed || connector.robotsPolicy?.toLowerCase() === "disallow") {
         const reason = !robots.allowed
           ? robots.reason
@@ -184,6 +179,9 @@ export class ProviderDiscoveryRunner {
           status: "Blocked",
           failures: 1,
           lastError: reason,
+          errorCode: "ROBOTS_DENIED",
+          providerMessage: "The provider robots policy does not permit this request.",
+          diagnosticContext: { path: target.path },
           health: "Warning",
           robotsPolicy: "disallow",
         });
@@ -201,6 +199,7 @@ export class ProviderDiscoveryRunner {
       let duplicates = 0;
       let failures = 0;
       let lastError: string | null = null;
+      let lastDiagnostic: ReturnType<typeof errorPersistence> | null = null;
       try {
         const discoveryResult = await this.discovery.discoverDetailed(
           this.providerId,
@@ -220,9 +219,27 @@ export class ProviderDiscoveryRunner {
             if (result.duplicate) duplicates += 1;
             else imported += 1;
           } catch (error) {
+            const typed = errorPersistence(error);
+            lastDiagnostic = typed;
+            if (typed.errorCode === "DELETED") {
+              await reconcileExplicitDeletion(this.database, {
+                sourceName: this.registry.get(this.providerId).name,
+                companyName: connector.company,
+                sourceJobId: job.externalId,
+                observedAt: new Date(),
+              });
+            }
             failures += 1;
-            lastError = error instanceof Error ? error.message : "Job import failed.";
+            lastError = typed.providerMessage;
           }
+        }
+        if (discoveryResult.feed.complete) {
+          await reconcileCompleteFeed(this.database, {
+            sourceName: this.registry.get(this.providerId).name,
+            companyName: connector.company,
+            sourceJobIds: discoveryResult.feed.sourceJobIds,
+            observedAt: new Date(),
+          });
         }
         await this.finish(connector, crawl.id, startedAt, {
           status: failures ? "CompletedWithErrors" : "Completed",
@@ -231,14 +248,18 @@ export class ProviderDiscoveryRunner {
           duplicates,
           failures,
           lastError,
+          errorCode: lastDiagnostic?.errorCode,
+          providerMessage: lastDiagnostic?.providerMessage,
+          diagnosticContext: lastDiagnostic?.diagnosticContext,
           health: failures ? "Warning" : "Healthy",
           robotsPolicy: robots.policy,
           successful: true,
           diagnostics: discoveryResult.diagnostics,
         });
       } catch (error) {
+        const typed = errorPersistence(error);
         failures += 1;
-        lastError = error instanceof Error ? error.message : "Discovery failed.";
+        lastError = typed.providerMessage;
         await this.finish(connector, crawl.id, startedAt, {
           status: "Failed",
           jobsDiscovered: discovered,
@@ -246,6 +267,9 @@ export class ProviderDiscoveryRunner {
           duplicates,
           failures,
           lastError,
+          errorCode: typed.errorCode,
+          providerMessage: typed.providerMessage,
+          diagnosticContext: typed.diagnosticContext,
           health: "Error",
           robotsPolicy: robots.policy,
         });
@@ -313,6 +337,10 @@ export class ProviderDiscoveryRunner {
       robotsPolicy: string;
       successful?: boolean;
       diagnostics?: import("../types").DiscoveryDiagnostics;
+      skipReason?: string;
+      errorCode?: import("../errors").ProviderErrorCode;
+      providerMessage?: string;
+      diagnosticContext?: Record<string, string | number | boolean | null>;
     },
   ) {
     const completedAt = new Date();
@@ -328,12 +356,16 @@ export class ProviderDiscoveryRunner {
           failures: result.failures,
           durationMs: completedAt.getTime() - startedAt.getTime(),
           lastError: result.lastError,
+          errorCode: result.errorCode,
+          providerMessage: result.providerMessage,
+          diagnosticContext: result.diagnosticContext,
           metadata: {
             events: ["crawl_started", "crawl_completed"],
             provider: this.providerId,
             trigger: this.options.trigger ?? "manual",
             robotsPolicy: result.robotsPolicy,
             diagnostics: result.diagnostics,
+            skipReason: result.skipReason,
           },
         },
       }),

@@ -63,6 +63,25 @@ const PROVIDERS: Array<{
         : null,
   },
   {
+    id: "jobscore",
+    name: "JobScore",
+    detect: (url) => {
+      if (url.hostname !== "careers.jobscore.com") return null;
+      const parts = url.pathname.split("/").filter(Boolean);
+      return parts[0] === "jobs" ? parts[1] ?? null : null;
+    },
+  },
+  {
+    id: "personio",
+    name: "Personio",
+    detect: (url) => {
+      const suffix = ".jobs.personio.de";
+      return url.hostname.endsWith(suffix)
+        ? url.hostname.slice(0, -suffix.length) || null
+        : null;
+    },
+  },
+  {
     id: "workday",
     name: "Workday",
     detect: (url) =>

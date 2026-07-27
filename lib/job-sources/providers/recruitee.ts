@@ -11,7 +11,13 @@ import type {
   JobSearchCriteria,
   ProviderContext,
 } from "../types";
-import { configuredHealth, connectorToken, stringValue } from "./provider-utils";
+import {
+  configuredHealth,
+  connectorToken,
+  stringValue,
+  validateProviderRecords,
+} from "./provider-utils";
+import { ProviderError } from "../errors";
 
 type RecruiteeOffer = {
   id?: number;
@@ -30,9 +36,10 @@ function offers(payload: unknown): RecruiteeOffer[] {
   if (Array.isArray(payload)) return payload as RecruiteeOffer[];
   if (payload && typeof payload === "object") {
     const value = payload as { offers?: RecruiteeOffer[]; offer?: RecruiteeOffer };
-    return value.offers ?? (value.offer ? [value.offer] : []);
+    if (Array.isArray(value.offers)) return value.offers;
+    if (value.offer) return [value.offer];
   }
-  return [];
+  throw new ProviderError("SCHEMA_DRIFT", "Recruitee feed offers must be a list.");
 }
 
 function locationFor(offer: RecruiteeOffer) {
@@ -57,13 +64,25 @@ export class RecruiteeProvider implements JobSourceProvider {
   constructor(private readonly client: FetchClient = fetch) {}
 
   async discover(criteria: JobSearchCriteria, context: ProviderContext) {
+    return (await this.discoverDetailed(criteria, context)).jobs;
+  }
+
+  async discoverDetailed(criteria: JobSearchCriteria, context: ProviderContext) {
     const company = encodeURIComponent(connectorToken(context));
     const payload = await fetchJson(
+      this.id,
       this.client,
       `https://${company}.recruitee.com/api/offers/`,
       context,
     );
-    return offers(payload).filter((offer) => matches(offer, criteria)).map(
+    const allOffers = offers(payload);
+    validateProviderRecords(this.id, allOffers.map((offer) => ({
+      id: String(offer.slug ?? offer.id ?? ""),
+      title: stringValue(offer.title),
+      url: stringValue(offer.careers_url)
+        || `https://${company}.recruitee.com/o/${encodeURIComponent(String(offer.slug ?? ""))}`,
+    })));
+    const jobs = allOffers.filter((offer) => matches(offer, criteria)).map(
       (offer): DiscoveredJob => ({
         providerId: this.id,
         externalId: String(offer.slug ?? offer.id ?? ""),
@@ -75,11 +94,32 @@ export class RecruiteeProvider implements JobSourceProvider {
         discoveredVia: "canonical",
       }),
     );
+    return {
+      jobs,
+      diagnostics: {
+        totalJobsDiscovered: allOffers.length,
+        titleMatches: jobs.length,
+        locationMatches: jobs.length,
+        excludedByTitle: allOffers.length - jobs.length,
+        excludedByLocation: 0,
+        excludedByEmploymentType: 0,
+        excludedByHardExclusions: 0,
+        closedJobs: 0,
+        excludedJobs: [],
+      },
+      feed: {
+        complete: true,
+        sourceJobIds: allOffers
+          .map((offer) => String(offer.slug ?? offer.id ?? ""))
+          .filter(Boolean),
+      },
+    };
   }
 
   async fetch(job: DiscoveredJob, context: ProviderContext) {
     const company = encodeURIComponent(connectorToken(context));
     const payload = await fetchJson(
+      this.id,
       this.client,
       `https://${company}.recruitee.com/api/offers/${encodeURIComponent(job.externalId)}`,
       context,
@@ -107,6 +147,7 @@ export class RecruiteeProvider implements JobSourceProvider {
       salary: "",
       location: locationFor(offer),
       employmentType: stringValue(offer.employment_type),
+      providerExternalId: posting.externalId,
     };
   }
 

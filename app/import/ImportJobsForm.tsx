@@ -115,7 +115,12 @@ export function ImportJobsForm() {
             </div>
             <form action={importJobAction}>
               {Object.entries(preview.input).map(([key, value]) => (
-                <input key={key} type="hidden" name={key} value={value} />
+                <input
+                  key={key}
+                  type="hidden"
+                  name={key}
+                  value={value instanceof Date ? value.toISOString() : value}
+                />
               ))}
               <button className="primary-button import-confirm-button" type="submit">
                 {state.duplicate ? "Update existing opportunity" : "Import and evaluate"} <span aria-hidden="true">→</span>

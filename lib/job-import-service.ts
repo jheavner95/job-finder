@@ -26,15 +26,40 @@ export async function importJobPreview(
   const { normalized, evaluation } = preview;
 
   return database.$transaction(async (transaction) => {
-    const duplicate = await transaction.job.findUnique({
-      where: { fingerprint: normalized.fingerprint },
+    const source = await transaction.jobSource.upsert({
+      where: { name: normalized.source },
+      update: {},
+      create: { name: normalized.source, approved: false },
+    });
+    const company = await transaction.company.upsert({
+      where: { name: normalized.company },
+      update: {},
+      create: { name: normalized.company },
+    });
+    const duplicate = await transaction.job.findFirst({
+      where: {
+        OR: [
+          { fingerprint: normalized.fingerprint },
+          ...(normalized.sourceUrl ? [{ sourceUrl: normalized.sourceUrl }] : []),
+          ...(normalized.providerExternalId ? [{
+            sourceId: source.id,
+            companyId: company.id,
+            sourceJobId: normalized.providerExternalId,
+          }] : []),
+        ],
+      },
       select: {
         id: true,
+        sourceJobId: true,
         title: true,
+        department: true,
         location: true,
         compensationText: true,
         normalizedDescription: true,
         normalizedRequirements: true,
+        postedAt: true,
+        sourceUpdatedAt: true,
+        applicationUrl: true,
       },
     });
 
@@ -43,6 +68,7 @@ export async function importJobPreview(
       jobId = duplicate.id;
       const changes = [
         duplicate.title !== normalized.title && { field: "Title", before: duplicate.title, after: normalized.title },
+        duplicate.department !== normalized.department && { field: "Department", before: duplicate.department, after: normalized.department },
         duplicate.location !== normalized.location && { field: "Location", before: duplicate.location, after: normalized.location },
         duplicate.compensationText !== normalized.salary && { field: "Salary", before: duplicate.compensationText, after: normalized.salary },
         duplicate.normalizedDescription !== normalized.description && { field: "Description", before: duplicate.normalizedDescription, after: normalized.description },
@@ -51,11 +77,25 @@ export async function importJobPreview(
           before: duplicate.normalizedRequirements,
           after: normalized.requirements,
         },
+        duplicate.postedAt?.getTime() !== normalized.postedAt?.getTime() && {
+          field: "Opened date", before: duplicate.postedAt, after: normalized.postedAt,
+        },
+        duplicate.sourceUpdatedAt?.getTime() !== normalized.sourceUpdatedAt?.getTime() && {
+          field: "Provider updated date", before: duplicate.sourceUpdatedAt, after: normalized.sourceUpdatedAt,
+        },
+        duplicate.applicationUrl !== normalized.applicationUrl && {
+          field: "Application URL", before: duplicate.applicationUrl, after: normalized.applicationUrl,
+        },
       ].filter(Boolean);
       await transaction.job.update({
         where: { id: duplicate.id },
         data: {
           lastSeenAt: new Date(),
+          sourceJobId: duplicate.sourceJobId ?? normalized.providerExternalId,
+          department: normalized.department,
+          postedAt: normalized.postedAt,
+          sourceUpdatedAt: normalized.sourceUpdatedAt,
+          applicationUrl: normalized.applicationUrl,
           activity: {
             create: [
               {
@@ -77,23 +117,18 @@ export async function importJobPreview(
         },
       });
     } else {
-      const source = await transaction.jobSource.upsert({
-        where: { name: normalized.source },
-        update: {},
-        create: { name: normalized.source, approved: false },
-      });
-      const company = await transaction.company.upsert({
-        where: { name: normalized.company },
-        update: {},
-        create: { name: normalized.company },
-      });
       const job = await transaction.job.create({
         data: {
+          sourceJobId: normalized.providerExternalId,
           fingerprint: normalized.fingerprint,
           title: normalized.title,
+          department: normalized.department,
           location: normalized.location,
           remoteStatus: normalized.remoteStatus,
           employmentType: normalized.employmentType,
+          postedAt: normalized.postedAt,
+          sourceUpdatedAt: normalized.sourceUpdatedAt,
+          applicationUrl: normalized.applicationUrl,
           compensationText: normalized.salary,
           sourceUrl: normalized.sourceUrl,
           originalSourceText: normalized.description,

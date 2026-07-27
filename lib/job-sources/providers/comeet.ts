@@ -11,7 +11,13 @@ import type {
   JobSearchCriteria,
   ProviderContext,
 } from "../types";
-import { configuredHealth, connectorToken, stringValue } from "./provider-utils";
+import {
+  configuredHealth,
+  connectorToken,
+  stringValue,
+  validateProviderRecords,
+} from "./provider-utils";
+import { ProviderError } from "../errors";
 
 type ComeetPosition = {
   uid?: string;
@@ -35,9 +41,10 @@ function positions(payload: unknown) {
   if (Array.isArray(payload)) return payload as ComeetPosition[];
   if (payload && typeof payload === "object") {
     const value = payload as { positions?: ComeetPosition[]; position?: ComeetPosition };
-    return value.positions ?? (value.position ? [value.position] : []);
+    if (Array.isArray(value.positions)) return value.positions;
+    if (value.position) return [value.position];
   }
-  return [];
+  throw new ProviderError("SCHEMA_DRIFT", "Comeet feed positions must be a list.");
 }
 
 function matches(position: ComeetPosition, criteria: JobSearchCriteria) {
@@ -56,13 +63,24 @@ export class ComeetProvider implements JobSourceProvider {
   constructor(private readonly client: FetchClient = fetch) {}
 
   async discover(criteria: JobSearchCriteria, context: ProviderContext) {
+    return (await this.discoverDetailed(criteria, context)).jobs;
+  }
+
+  async discoverDetailed(criteria: JobSearchCriteria, context: ProviderContext) {
     const { companyUid, token } = credentials(context);
     const payload = await fetchJson(
+      this.id,
       this.client,
       `https://www.comeet.co/careers-api/2.0/company/${encodeURIComponent(companyUid)}/positions?token=${encodeURIComponent(token)}`,
       context,
     );
-    return positions(payload).filter((position) => matches(position, criteria)).map(
+    const allPositions = positions(payload);
+    validateProviderRecords(this.id, allPositions.map((position) => ({
+      id: stringValue(position.uid),
+      title: stringValue(position.name),
+      url: stringValue(position.url_recruit_hosted_page),
+    })));
+    const jobs = allPositions.filter((position) => matches(position, criteria)).map(
       (position): DiscoveredJob => ({
         providerId: this.id,
         externalId: stringValue(position.uid),
@@ -73,11 +91,30 @@ export class ComeetProvider implements JobSourceProvider {
         discoveredVia: "canonical",
       }),
     );
+    return {
+      jobs,
+      diagnostics: {
+        totalJobsDiscovered: allPositions.length,
+        titleMatches: jobs.length,
+        locationMatches: jobs.length,
+        excludedByTitle: allPositions.length - jobs.length,
+        excludedByLocation: 0,
+        excludedByEmploymentType: 0,
+        excludedByHardExclusions: 0,
+        closedJobs: 0,
+        excludedJobs: [],
+      },
+      feed: {
+        complete: true,
+        sourceJobIds: allPositions.map((position) => stringValue(position.uid)).filter(Boolean),
+      },
+    };
   }
 
   async fetch(job: DiscoveredJob, context: ProviderContext) {
     const { companyUid, token } = credentials(context);
     const payload = await fetchJson(
+      this.id,
       this.client,
       `https://www.comeet.co/careers-api/2.0/company/${encodeURIComponent(companyUid)}/positions/${encodeURIComponent(job.externalId)}?token=${encodeURIComponent(token)}`,
       context,
@@ -104,6 +141,7 @@ export class ComeetProvider implements JobSourceProvider {
       salary: detail(/salary|compensation/i),
       location: stringValue(position.location?.name),
       employmentType: stringValue(position.employment_type),
+      providerExternalId: posting.externalId,
     };
   }
 

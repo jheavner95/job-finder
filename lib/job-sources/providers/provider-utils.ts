@@ -1,4 +1,5 @@
 import type { ProviderContext } from "../types";
+import { ProviderError } from "../errors";
 
 export function connectorToken(context: ProviderContext) {
   const token = context.connectorKey.trim();
@@ -46,4 +47,46 @@ export function configuredHealth(
       rateLimit: context.rateLimit ?? null,
     },
   };
+}
+
+export function validateProviderRecords<T extends { id: string; title: string; url: string }>(
+  providerId: string,
+  records: T[],
+) {
+  const seen = new Set<string>();
+  records.forEach((record, index) => {
+    if (!record.id) {
+      throw new ProviderError(
+        "MISSING_ID",
+        "A provider posting is missing its required identifier.",
+        { providerId, recordIndex: index },
+      );
+    }
+    if (seen.has(record.id)) {
+      throw new ProviderError(
+        "DUPLICATE_ID",
+        "The provider feed contains a duplicate posting identifier.",
+        { providerId, sourceJobId: record.id },
+      );
+    }
+    if (!record.title) {
+      throw new ProviderError(
+        "SCHEMA_DRIFT",
+        "A provider posting is missing its required title.",
+        { providerId, sourceJobId: record.id },
+      );
+    }
+    try {
+      const url = new URL(record.url);
+      if (!["http:", "https:"].includes(url.protocol)) throw new Error();
+    } catch {
+      throw new ProviderError(
+        "SCHEMA_DRIFT",
+        "A provider posting has an invalid canonical URL.",
+        { providerId, sourceJobId: record.id },
+      );
+    }
+    seen.add(record.id);
+  });
+  return records;
 }

@@ -11,6 +11,8 @@ describe("company career provider detection", () => {
     ["https://jobs.smartrecruiters.com/ExampleCompany", "smartrecruiters", "ExampleCompany"],
     ["https://example.recruitee.com", "recruitee", "example"],
     ["https://apply.workable.com/example-company", "workable", "example-company"],
+    ["https://example.jobs.personio.de/?language=en", "personio", "example"],
+    ["https://careers.jobscore.com/jobs/example", "jobscore", "example"],
     ["https://example.wd5.myworkdayjobs.com/en-US/careers", "workday", "example"],
   ])("detects %s", (url, providerId, connectorKey) => {
     expect(detectCompanySource(url)).toMatchObject({ providerId, connectorKey });

@@ -2,6 +2,7 @@ import { fetchJson } from "../provider";
 import type { DiscoveredJob, ProviderContext } from "../types";
 import { connectorToken, joinedText, stringValue } from "./provider-utils";
 import { contentText, JsonJobProvider, type GenericPosting } from "./json-provider";
+import { ProviderError } from "../errors";
 
 export class WorkableProvider extends JsonJobProvider {
   readonly id = "workable";
@@ -13,11 +14,14 @@ export class WorkableProvider extends JsonJobProvider {
 
   protected postings(payload: unknown) {
     const jobs = (payload as { jobs?: unknown[] })?.jobs;
-    return Array.isArray(jobs) ? jobs : [];
+    if (!Array.isArray(jobs)) {
+      throw new ProviderError("SCHEMA_DRIFT", "Workable feed jobs must be a list.");
+    }
+    return jobs;
   }
 
   async fetch(job: DiscoveredJob, context: ProviderContext) {
-    const payload = await fetchJson(this.client, this.discoveryUrl(context), context);
+    const payload = await fetchJson(this.id, this.client, this.discoveryUrl(context), context);
     const posting = this.postings(payload).find((item) => {
       const mapped = this.mapPosting(item);
       return mapped.id === job.externalId && mapped.url === job.canonicalUrl;

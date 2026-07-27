@@ -11,7 +11,13 @@ import type {
   JobSearchCriteria,
   ProviderContext,
 } from "../types";
-import { configuredHealth, joinedText, stringValue } from "./provider-utils";
+import {
+  configuredHealth,
+  joinedText,
+  stringValue,
+  validateProviderRecords,
+} from "./provider-utils";
+import { getOperationalCapability } from "../capabilities";
 
 export type GenericPosting = {
   id: string;
@@ -39,20 +45,51 @@ export abstract class JsonJobProvider implements JobSourceProvider {
   }
 
   async discover(criteria: JobSearchCriteria, context: ProviderContext) {
-    const payload = await fetchJson(this.client, this.discoveryUrl(context), context);
-    return this.postings(payload)
-      .map((item) => this.mapPosting(item, context))
-      .filter((job) => {
-        const title = job.title.toLowerCase();
-        const location = job.location.toLowerCase();
-        return (
-          (!criteria.titles.length
-            || criteria.titles.some((value) => title.includes(value.toLowerCase())))
-          && (!criteria.locations.length
-            || criteria.locations.some((value) => location.includes(value.toLowerCase())))
-        );
-      })
-      .map((job): DiscoveredJob => ({
+    return (await this.discoverDetailed(criteria, context)).jobs;
+  }
+
+  async discoverDetailed(criteria: JobSearchCriteria, context: ProviderContext) {
+    const payload = await fetchJson(this.id, this.client, this.discoveryUrl(context), context);
+    const allJobs = validateProviderRecords(
+      this.id,
+      this.postings(payload).map((item) => this.mapPosting(item, context)),
+    );
+    const diagnostics = {
+      totalJobsDiscovered: allJobs.length,
+      titleMatches: 0,
+      locationMatches: 0,
+      excludedByTitle: 0,
+      excludedByLocation: 0,
+      excludedByEmploymentType: 0,
+      excludedByHardExclusions: 0,
+      closedJobs: 0,
+      excludedJobs: [] as import("../types").ExcludedJobDiagnostic[],
+    };
+    const jobs = allJobs.flatMap((job): DiscoveredJob[] => {
+      const titleMatch = !criteria.titles.length
+        || criteria.titles.some((value) => job.title.toLowerCase().includes(value.toLowerCase()));
+      const locationMatch = !criteria.locations.length
+        || criteria.locations.some((value) => job.location.toLowerCase().includes(value.toLowerCase()));
+      if (titleMatch) diagnostics.titleMatches += 1;
+      if (titleMatch && locationMatch) diagnostics.locationMatches += 1;
+      if (!titleMatch || !locationMatch) {
+        const reason = titleMatch ? "location" as const : "title" as const;
+        if (reason === "title") diagnostics.excludedByTitle += 1;
+        else diagnostics.excludedByLocation += 1;
+        diagnostics.excludedJobs.push({
+          externalId: job.id,
+          title: job.title,
+          canonicalUrl: job.url,
+          reason,
+          matchedTitleTerms: titleMatch ? criteria.titles : [],
+          excludedTitleTerms: titleMatch ? [] : criteria.titles,
+          detail: reason === "title"
+            ? `Title did not match: ${criteria.titles.join(", ")}.`
+            : `Location did not match: ${criteria.locations.join(", ")}.`,
+        });
+        return [];
+      }
+      return [{
         providerId: this.id,
         externalId: job.id,
         title: job.title,
@@ -60,11 +97,20 @@ export abstract class JsonJobProvider implements JobSourceProvider {
         location: job.location,
         canonicalUrl: job.url,
         discoveredVia: "canonical",
-      }));
+      }];
+    });
+    return {
+      jobs,
+      diagnostics,
+      feed: {
+        complete: getOperationalCapability(this.id).completeFeed,
+        sourceJobIds: allJobs.map((job) => job.id).filter(Boolean),
+      },
+    };
   }
 
   async fetch(job: DiscoveredJob, context: ProviderContext) {
-    const payload = await fetchJson(this.client, this.fetchUrl(job, context), context);
+    const payload = await fetchJson(this.id, this.client, this.fetchUrl(job, context), context);
     return {
       providerId: this.id,
       externalId: job.externalId,
@@ -85,6 +131,7 @@ export abstract class JsonJobProvider implements JobSourceProvider {
       salary: mapped.salary,
       location: mapped.location,
       employmentType: mapped.employmentType,
+      providerExternalId: posting.externalId,
     };
   }
 
