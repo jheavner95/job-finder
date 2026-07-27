@@ -24,6 +24,8 @@ export type JobSearchCriteria = {
   hybrid?: boolean;
   country?: string;
   keywords?: string[];
+  employmentTypes?: string[];
+  hardExclusions?: string[];
 };
 
 export type ProviderContext = {
@@ -74,6 +76,33 @@ export type DiscoveredJob = {
   location?: string;
   canonicalUrl: string;
   discoveredVia?: "canonical" | "linkedin" | "indeed" | "google-jobs" | "ziprecruiter";
+};
+
+export type ExcludedJobDiagnostic = {
+  externalId: string;
+  title: string;
+  canonicalUrl: string;
+  reason: "title" | "location" | "employment_type" | "hard_exclusion" | "closed";
+  matchedTitleTerms: string[];
+  excludedTitleTerms: string[];
+  detail: string;
+};
+
+export type DiscoveryDiagnostics = {
+  totalJobsDiscovered: number;
+  titleMatches: number;
+  locationMatches: number;
+  excludedByTitle: number;
+  excludedByLocation: number;
+  excludedByEmploymentType: number;
+  excludedByHardExclusions: number;
+  closedJobs: number;
+  excludedJobs: ExcludedJobDiagnostic[];
+};
+
+export type ProviderDiscoveryResult = {
+  jobs: DiscoveredJob[];
+  diagnostics: DiscoveryDiagnostics;
 };
 
 export type CanonicalJobPosting = {

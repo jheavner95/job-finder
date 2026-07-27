@@ -8,6 +8,7 @@ import {
 } from "@/lib/context-presentation";
 import { presentDashboard } from "@/lib/dashboard-presentation";
 import { getDashboardSummary } from "@/lib/queries";
+import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,17 @@ function scoreTone(score: number) {
 }
 
 export default async function DashboardPage() {
-  const [summary, readiness] = await Promise.all([
+  const [summary, readiness, lastScan, nextSchedule] = await Promise.all([
     getDashboardSummary(),
     evaluateContextLibrary(),
+    prisma.discoveryBatch.findFirst({
+      where: { status: { not: "Running" } },
+      orderBy: { startedAt: "desc" },
+    }),
+    prisma.connectorSchedule.findFirst({
+      where: { nextRunAt: { not: null }, connector: { enabled: true } },
+      orderBy: { nextRunAt: "asc" },
+    }),
   ]);
   const briefing = presentDashboard(summary.jobs);
   const contextActions = getNextContextActions(readiness.documents);
@@ -50,6 +59,19 @@ export default async function DashboardPage() {
           </Link>
         )}
       </header>
+
+      <section className="dashboard-scan-card" aria-labelledby="dashboard-scan-title">
+        <div>
+          <p className="eyebrow">Discovery status</p>
+          <h2 id="dashboard-scan-title">{lastScan ? "Job discovery is up to date" : "Job Finder has not scanned for opportunities yet."}</h2>
+        </div>
+        <dl>
+          <div><dt>Last scan</dt><dd>{lastScan?.completedAt ? new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(lastScan.completedAt) : "Never"}</dd></div>
+          <div><dt>New matches</dt><dd>{lastScan ? lastScan.jobsImported + lastScan.duplicates : "—"}</dd></div>
+          <div><dt>Next scan</dt><dd>{nextSchedule?.nextRunAt ? new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(nextSchedule.nextRunAt) : "Manual only"}</dd></div>
+        </dl>
+        <Link className="primary-button button-link" href="/scan">{lastScan ? "Scan Jobs" : "Run Your First Scan"}</Link>
+      </section>
 
       <section className="attention-section" aria-labelledby="attention-title">
         <div className="briefing-section-heading">

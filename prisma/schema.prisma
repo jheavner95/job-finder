@@ -180,7 +180,23 @@ model CompanyConnector {
   schedule            ConnectorSchedule?
 
   @@index([atsType, enabled])
+  @@unique([atsType, connectorKey])
   @@index([health])
+}
+
+model GreenhouseComparisonItem {
+  id             String   @id @default(cuid())
+  submittedUrl   String
+  canonicalUrl   String?
+  boardToken     String?
+  companyName    String?
+  status         String
+  reason         String
+  connectorId    String?
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([boardToken])
 }
 
 model ConnectorCrawl {
@@ -233,6 +249,7 @@ model DiscoveryBatch {
   jobsImported   Int      @default(0)
   duplicates     Int      @default(0)
   failures       Int      @default(0)
+  cancelRequested Boolean @default(false)
   metadata       Json?
   crawlRuns      ConnectorCrawl[]
 

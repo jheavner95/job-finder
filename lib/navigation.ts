@@ -12,6 +12,7 @@ export const NAV_GROUPS = [
     id: "discovery",
     label: "Discovery",
     items: [
+      { href: "/scan", label: "Scan Jobs", icon: "radar" },
       { href: "/sources", label: "Sources", icon: "radar" },
       { href: "/searches", label: "Saved Searches", icon: "bookmark-search" },
       { href: "/import", label: "Import Jobs", icon: "upload" },

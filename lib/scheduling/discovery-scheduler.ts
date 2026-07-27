@@ -16,7 +16,7 @@ type SchedulerTrigger = "manual" | "scheduled";
 
 export type SchedulerResult = CrawlSummary & {
   batchId: string;
-  status: "Completed" | "CompletedWithErrors" | "SkippedConcurrent";
+  status: "Completed" | "CompletedWithErrors" | "Cancelled" | "Failed" | "SkippedConcurrent";
 };
 
 export class DiscoveryScheduler {
@@ -72,7 +72,21 @@ export class DiscoveryScheduler {
 
     try {
       const connectors = await this.connectorsFor(options, now);
+      await this.database.discoveryBatch.update({
+        where: { id: batch.id },
+        data: {
+          metadata: {
+            selectedConnectorIds: connectors.map((connector) => connector.id),
+            plannedConnectors: connectors.length,
+          },
+        },
+      });
       for (const connector of connectors) {
+        const cancellation = await this.database.discoveryBatch.findUnique({
+          where: { id: batch.id },
+          select: { cancelRequested: true },
+        });
+        if (cancellation?.cancelRequested) break;
         try {
           const result = await new ProviderDiscoveryRunner(
             this.database,
@@ -162,7 +176,13 @@ export class DiscoveryScheduler {
       }
 
       const completedAt = new Date();
-      const status = summary.failures ? "CompletedWithErrors" : "Completed";
+      const cancellation = await this.database.discoveryBatch.findUnique({
+        where: { id: batch.id },
+        select: { cancelRequested: true },
+      });
+      const status = cancellation?.cancelRequested
+        ? "Cancelled"
+        : summary.failures ? "CompletedWithErrors" : "Completed";
       summary.durationMs = completedAt.getTime() - startedAt.getTime();
       await this.database.discoveryBatch.update({
         where: { id: batch.id },
@@ -179,14 +199,45 @@ export class DiscoveryScheduler {
       });
       await this.notifications.publish({
         type: "discovery_complete",
-        title: options.trigger === "scheduled"
-          ? "Scheduled discovery completed"
-          : "Manual discovery completed",
-        message: `${summary.jobsImported} new opportunities, ${summary.duplicates} duplicates, ${summary.failures} failures.`,
+        title: status === "Cancelled"
+          ? "Job scan cancelled"
+          : summary.failures
+            ? `Job scan completed with ${summary.failures} source warning${summary.failures === 1 ? "" : "s"}`
+            : `Job scan complete: ${summary.jobsImported} new opportunities found`,
+        message: status === "Cancelled"
+          ? `${summary.companiesProcessed} completed source${summary.companiesProcessed === 1 ? "" : "s"} were preserved.`
+          : `${summary.jobsImported} new opportunities, ${summary.duplicates} duplicates, ${summary.failures} failures.`,
         href: "/briefing",
         metadata: { batchId: batch.id, trigger: options.trigger },
       });
       return { batchId: batch.id, status, ...summary };
+    } catch (error) {
+      const completedAt = new Date();
+      const message = error instanceof Error ? error.message : "Job scan failed.";
+      summary.failures += 1;
+      summary.durationMs = completedAt.getTime() - startedAt.getTime();
+      await this.database.discoveryBatch.update({
+        where: { id: batch.id },
+        data: {
+          status: "Failed",
+          completedAt,
+          durationMs: summary.durationMs,
+          connectorsRun: summary.companiesProcessed,
+          jobsDiscovered: summary.jobsDiscovered,
+          jobsImported: summary.jobsImported,
+          duplicates: summary.duplicates,
+          failures: summary.failures,
+          metadata: { fatalError: message },
+        },
+      });
+      await this.notifications.publish({
+        type: "connector_failure",
+        title: "Job scan failed",
+        message,
+        href: `/scan?batchId=${batch.id}`,
+        metadata: { batchId: batch.id, trigger: options.trigger },
+      });
+      return { batchId: batch.id, status: "Failed", ...summary };
     } finally {
       await this.releaseLock(lockToken);
     }

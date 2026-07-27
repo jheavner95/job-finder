@@ -5,6 +5,8 @@ import { LeverProvider } from "./providers/lever";
 import { SmartRecruitersProvider } from "./providers/smartrecruiters";
 import { WorkableProvider } from "./providers/workable";
 import { WorkdayProvider } from "./providers/workday";
+import { RecruiteeProvider } from "./providers/recruitee";
+import { ComeetProvider } from "./providers/comeet";
 
 export class JobSourceRegistry {
   private readonly providers = new Map<string, JobSourceProvider>();
@@ -37,6 +39,8 @@ export function createJobSourceRegistry() {
     .register(new AshbyProvider())
     .register(new WorkableProvider())
     .register(new SmartRecruitersProvider())
+    .register(new RecruiteeProvider())
+    .register(new ComeetProvider())
     .register(new WorkdayProvider());
 }
 

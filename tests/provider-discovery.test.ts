@@ -29,6 +29,122 @@ afterEach(async () => {
 });
 
 describe("provider discovery persistence", () => {
+  it("runs multiple enabled Greenhouse boards in one discovery batch", async () => {
+    const database = testDatabase();
+    const suffix = randomUUID();
+    const connectors = await Promise.all(["alpha", "beta"].map((token) =>
+      database.companyConnector.create({
+        data: {
+          company: `Greenhouse ${token} ${suffix}`,
+          careerUrl: `https://boards.greenhouse.io/${token}`,
+          atsType: "greenhouse",
+          connectorKey: `${token}-${suffix}`,
+          enabled: true,
+          health: "Warning",
+          crawlDelay: 0,
+          searchCriteria: { titles: ["Product Designer"], locations: ["Remote"] },
+        },
+      })));
+    const client = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/robots.txt")) {
+        return new Response("User-agent: *\nDisallow:", { status: 200 });
+      }
+      const token = url.includes("alpha-") ? "alpha" : "beta";
+      const job = {
+        id: `${token}-${suffix}`,
+        title: "Senior Product Designer",
+        absolute_url: `https://boards.greenhouse.io/${token}/jobs/${token}-${suffix}`,
+        location: { name: "Remote — United States" },
+        content: "<p>Lead product strategy and design systems.</p>",
+        metadata: [],
+      };
+      return new Response(JSON.stringify(url.includes(`/jobs/${token}-`) ? job : { jobs: [job] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    const registry = new JobSourceRegistry().register(new GreenhouseProvider(client));
+    const result = await new ProviderDiscoveryRunner(
+      database,
+      "greenhouse",
+      client,
+      registry,
+      { connectorIds: connectors.map((connector) => connector.id) },
+    ).run();
+    expect(result).toMatchObject({
+      companiesProcessed: 2,
+      jobsDiscovered: 2,
+      jobsImported: 2,
+      failures: 0,
+    });
+    expect(await database.connectorCrawl.count({
+      where: { connectorId: { in: connectors.map((connector) => connector.id) } },
+    })).toBe(2);
+  });
+
+  it("cancels after the current connector and preserves completed imports", async () => {
+    const database = testDatabase();
+    const suffix = randomUUID();
+    const connectors = await Promise.all(["cancel-alpha", "cancel-beta"].map((token) =>
+      database.companyConnector.create({
+        data: {
+          company: `${token} ${suffix}`,
+          careerUrl: `https://boards.greenhouse.io/${token}`,
+          atsType: "greenhouse",
+          connectorKey: `${token}-${suffix}`,
+          enabled: true,
+          health: "Warning",
+          crawlDelay: 0,
+          searchCriteria: { titles: ["Product Designer"], locations: ["Remote"] },
+        },
+      })));
+    const client = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/robots.txt")) {
+        return new Response("User-agent: *\nDisallow:", { status: 200 });
+      }
+      const token = url.includes("cancel-alpha-") ? "cancel-alpha" : "cancel-beta";
+      const job = {
+        id: `${token}-${suffix}`,
+        title: "Product Designer",
+        absolute_url: `https://boards.greenhouse.io/${token}/jobs/${token}-${suffix}`,
+        location: { name: "Remote" },
+        content: "<p>Product design strategy and design systems.</p>",
+        metadata: [],
+      };
+      if (url.includes(`/jobs/${token}-`) && token === "cancel-alpha") {
+        await database.discoveryBatch.updateMany({
+          where: { status: "Running" },
+          data: { cancelRequested: true },
+        });
+      }
+      return new Response(JSON.stringify(url.includes(`/jobs/${token}-`) ? job : { jobs: [job] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    const registry = new JobSourceRegistry().register(new GreenhouseProvider(client));
+    const result = await new DiscoveryScheduler(database, client, registry).run({
+      trigger: "manual",
+      connectorIds: connectors.map((connector) => connector.id),
+    });
+    expect(result).toMatchObject({
+      status: "Cancelled",
+      companiesProcessed: 1,
+      jobsImported: 1,
+    });
+    expect(await database.job.count({
+      where: { company: { name: connectors[0].company } },
+    })).toBe(1);
+    expect(await database.connectorCrawl.count({
+      where: { connectorId: connectors[1].id },
+    })).toBe(0);
+    await expect(database.schedulerLock.findUniqueOrThrow({
+      where: { id: "discovery-scheduler" },
+    })).resolves.toMatchObject({ lockToken: null });
+  });
+
   it("imports Workable once, prevents a repeat duplicate, and records crawl activity", async () => {
     const database = testDatabase();
     const company = `Workable Verification ${randomUUID()}`;

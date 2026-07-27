@@ -3,6 +3,7 @@ import { WorkspaceLayout } from "@/app/components/PageLayout";
 import { PageHeader } from "@/app/components/PageHeader";
 import { getJobs } from "@/lib/queries";
 import type { JobStatus } from "@/lib/types";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,7 @@ export default async function ReviewPage({
           {filtered.map((job) => <JobRow key={job.id} job={job} />)}
         </div>
       ) : (
-        <div className="empty-state"><strong>{jobs.length ? "No jobs found" : "No opportunities are waiting for review."}</strong><p>{jobs.length ? "Try a broader filter or search term." : "Newly imported opportunities will appear here."}</p></div>
+        <div className="empty-state"><strong>{jobs.length ? "No jobs found" : "No opportunities are waiting for review."}</strong><p>{jobs.length ? "Try a broader filter or search term." : "Newly imported opportunities will appear here."}</p>{!jobs.length && <Link className="primary-button button-link" href="/scan">Scan Jobs</Link>}</div>
       )}
     </WorkspaceLayout>
   );

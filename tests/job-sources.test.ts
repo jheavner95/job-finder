@@ -6,6 +6,8 @@ import { LeverProvider } from "../lib/job-sources/providers/lever";
 import { AshbyProvider } from "../lib/job-sources/providers/ashby";
 import { SmartRecruitersProvider } from "../lib/job-sources/providers/smartrecruiters";
 import { WorkableProvider } from "../lib/job-sources/providers/workable";
+import { RecruiteeProvider } from "../lib/job-sources/providers/recruitee";
+import { ComeetProvider } from "../lib/job-sources/providers/comeet";
 import {
   createJobSourceRegistry,
   JobSourceRegistry,
@@ -53,6 +55,8 @@ describe("job source engine", () => {
         "ashby",
         "workable",
         "smartrecruiters",
+        "recruitee",
+        "comeet",
         "workday",
       ]);
   });
@@ -138,6 +142,93 @@ describe("job source engine", () => {
       context,
     );
     expect(jobs.map((job) => job.externalId)).toEqual(["123"]);
+  });
+
+  it("matches Greenhouse design role variants and explains every exclusion", async () => {
+    const client = vi.fn(() => response({
+      jobs: [
+        { ...greenhouseJob, id: 1, title: "Principal UX Designer, Enterprise AI" },
+        { ...greenhouseJob, id: 2, title: "Product Design Lead — Growth Platform" },
+        { ...greenhouseJob, id: 3, title: "Senior Software Engineer" },
+        { ...greenhouseJob, id: 4, title: "Design Manager", location: { name: "London" } },
+      ],
+    }));
+    const result = await new GreenhouseProvider(client).discoverDetailed(
+      { titles: ["Senior Product Designer"], locations: ["Remote", "United States"] },
+      context,
+    );
+    expect(result.jobs.map((job) => job.externalId)).toEqual(["1", "2"]);
+    expect(result.diagnostics).toMatchObject({
+      totalJobsDiscovered: 4,
+      titleMatches: 3,
+      locationMatches: 2,
+      excludedByTitle: 1,
+      excludedByLocation: 1,
+    });
+    expect(result.diagnostics.excludedJobs).toHaveLength(2);
+    expect(result.diagnostics.excludedJobs.map((job) => job.reason).sort())
+      .toEqual(["location", "title"]);
+  });
+
+  it("uses Recruitee's unauthenticated Careers Site API and preserves its canonical URL", async () => {
+    const offer = {
+      id: 71,
+      slug: "staff-product-designer",
+      title: "Staff Product Designer",
+      description: "<p>Own an enterprise design system.</p>",
+      requirements: "<p>Eight years of product design experience.</p>",
+      careers_url: "https://example.recruitee.com/o/staff-product-designer",
+      employment_type: "full_time",
+      remote: true,
+      locations: [{ country: "United States" }],
+    };
+    const client = vi.fn()
+      .mockImplementationOnce(() => response({ offers: [offer] }))
+      .mockImplementationOnce(() => response({ offer }));
+    const provider = new RecruiteeProvider(client);
+    const jobs = await provider.discover(
+      { titles: ["Staff Product Designer"], locations: ["Remote"] },
+      { ...context, connectorKey: "example", careerUrl: "https://example.recruitee.com" },
+    );
+    expect(jobs).toHaveLength(1);
+    const normalized = provider.normalize(
+      await provider.fetch(jobs[0], context),
+      context,
+    );
+    expect(normalized.url).toBe(offer.careers_url);
+    expect(provider.validate(normalized).valid).toBe(true);
+  });
+
+  it("normalizes Comeet's public Careers API posting and preserves the hosted URL", async () => {
+    const position = {
+      uid: "87.405",
+      name: "Lead Product Designer",
+      url_recruit_hosted_page: "https://www.comeet.co/jobs/example/lead-product-designer/87.405",
+      location: { name: "Remote, United States" },
+      employment_type: "Full-time",
+      details: [
+        { name: "Description", value: "<p>Lead product strategy and design systems.</p>" },
+        { name: "Requirements", value: "<p>Eight years of experience.</p>" },
+      ],
+    };
+    const client = vi.fn(() => response({ positions: [position] }));
+    const provider = new ComeetProvider(client);
+    const comeetContext = {
+      ...context,
+      company: "Comeet Example",
+      connectorKey: "30.005:PUBLIC_TOKEN",
+      careerUrl: "https://www.comeet.co/jobs/example",
+    };
+    const jobs = await provider.discover(
+      { titles: ["Lead Product Designer"], locations: ["Remote"] },
+      comeetContext,
+    );
+    const normalized = provider.normalize(
+      await provider.fetch(jobs[0], comeetContext),
+      comeetContext,
+    );
+    expect(provider.validate(normalized).valid).toBe(true);
+    expect(normalized.url).toBe(position.url_recruit_hosted_page);
   });
 
   it("uses the most specific robots rule and reads crawl delay", () => {

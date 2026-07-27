@@ -78,6 +78,7 @@ export default async function DailyBriefingPage() {
       <PageHeader
         title="Daily briefing"
         subtitle="What changed across scheduled and manual discovery in the last 24 hours."
+        action={<Link className="primary-button button-link" href="/scan">Scan Jobs</Link>}
       />
 
       {!newJobs.length && !crawls.length && !connectors.length && reviewCount === 0 && (

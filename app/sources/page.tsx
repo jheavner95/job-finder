@@ -4,10 +4,15 @@ import { WorkspaceLayout } from "@/app/components/PageLayout";
 import { prisma } from "@/lib/db";
 import { mapError } from "@/lib/errors/app-error";
 import { jobSourceRegistry } from "@/lib/job-sources/registry";
+import { PROVIDER_CAPABILITIES } from "@/lib/job-sources/capabilities";
+import type { DiscoveryDiagnostics } from "@/lib/job-sources/types";
 import { scheduleLabel } from "@/lib/scheduling/schedule";
 
 import {
   addCompanyConnectorAction,
+  bulkImportGreenhouseBoardsAction,
+  compareMyGreenhouseUrlsAction,
+  addMissingGreenhouseBoardAction,
   runProviderDiscoveryAction,
   runScheduledDiscoveryAction,
   toggleConnectorAction,
@@ -31,6 +36,14 @@ function safeSourceError(value: string | null | undefined) {
   return `${error.title} ${error.message}`;
 }
 
+function diagnosticsFrom(value: unknown): DiscoveryDiagnostics | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const diagnostics = (value as Record<string, unknown>).diagnostics;
+  return diagnostics && typeof diagnostics === "object" && !Array.isArray(diagnostics)
+    ? diagnostics as DiscoveryDiagnostics
+    : null;
+}
+
 export default async function SourcesPage({
   searchParams,
 }: {
@@ -47,20 +60,36 @@ export default async function SourcesPage({
       schedule: true,
     },
   });
-  const batches = await prisma.discoveryBatch.findMany({
-    orderBy: { startedAt: "desc" },
-    take: 12,
-  });
   const recentRuns = await prisma.connectorCrawl.findMany({
     include: { connector: true },
     orderBy: { startedAt: "desc" },
     take: 30,
+  });
+  const comparisons = await prisma.greenhouseComparisonItem.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 250,
   });
   const ran = params.companies !== undefined;
   const providers = jobSourceRegistry.list();
   const providerNames = new Map(
     providers.map((provider) => [provider.id, provider.name]),
   );
+  const greenhouseConnectors = connectors.filter((connector) => connector.atsType === "greenhouse");
+  const latestGreenhouseRuns = recentRuns.filter((run) => run.connector.atsType === "greenhouse");
+  const latestGreenhouseBatchId = latestGreenhouseRuns[0]?.batchId;
+  const latestGreenhouseBatchRuns = latestGreenhouseBatchId
+    ? latestGreenhouseRuns.filter((run) => run.batchId === latestGreenhouseBatchId)
+    : [];
+  const greenhouseCoverage = {
+    enabled: greenhouseConnectors.filter((connector) => connector.enabled).length,
+    checked: latestGreenhouseBatchRuns.length,
+    discovered: latestGreenhouseBatchRuns.reduce((sum, run) => sum + run.jobsDiscovered, 0),
+    imported: latestGreenhouseBatchRuns.reduce((sum, run) => sum + run.jobsImported, 0),
+    excluded: latestGreenhouseBatchRuns.reduce((sum, run) => {
+      const diagnostics = diagnosticsFrom(run.metadata);
+      return sum + (diagnostics?.excludedJobs.length ?? 0);
+    }, 0),
+  };
 
   return (
     <WorkspaceLayout className="sources-page">
@@ -84,11 +113,38 @@ export default async function SourcesPage({
           <strong>Company source saved.</strong>
         </div>
       )}
+      {params.bulkAdded !== undefined && (
+        <div className="crawl-result" role="status">
+          <strong>Greenhouse directory imported.</strong>
+          <span>{params.bulkAdded} added</span>
+          <span>{params.bulkSkipped} skipped as duplicate or invalid</span>
+        </div>
+      )}
+      {params.compared !== undefined && (
+        <div className="crawl-result" role="status">
+          <strong>MyGreenhouse URLs compared.</strong><span>{params.compared} checked</span>
+        </div>
+      )}
       {params.error && (
         <div className="crawl-result crawl-error" role="alert">
           <strong>Check the company, URL, board token, and rate settings.</strong>
         </div>
       )}
+
+      <section className="coverage-panel" aria-labelledby="greenhouse-coverage-title">
+        <div>
+          <p className="eyebrow">Greenhouse coverage</p>
+          <h2 id="greenhouse-coverage-title">Registered company boards</h2>
+          <p>Greenhouse has no public global MyGreenhouse search API. Coverage is the set of enabled public company boards below.</p>
+        </div>
+        <dl className="coverage-stats">
+          <div><dt>Companies enabled</dt><dd>{greenhouseCoverage.enabled}</dd></div>
+          <div><dt>Boards checked last run</dt><dd>{greenhouseCoverage.checked}</dd></div>
+          <div><dt>Jobs discovered</dt><dd>{greenhouseCoverage.discovered}</dd></div>
+          <div><dt>Matches imported</dt><dd>{greenhouseCoverage.imported}</dd></div>
+          <div><dt>Jobs excluded</dt><dd>{greenhouseCoverage.excluded}</dd></div>
+        </dl>
+      </section>
 
       <section className="sources-toolbar" aria-labelledby="connector-status">
         <div>
@@ -97,7 +153,8 @@ export default async function SourcesPage({
           <p>Each source is checked one at a time and follows the provider&apos;s published access rules.</p>
         </div>
         <div className="source-toolbar-actions">
-          <form action={runScheduledDiscoveryAction}><SubmitButton pendingLabel="Running discovery…">Run due schedules</SubmitButton></form>
+          <a className="primary-button button-link" href="/scan">Scan Jobs</a>
+          <form action={runScheduledDiscoveryAction}><SubmitButton pendingLabel="Running schedules…">Run due schedules</SubmitButton></form>
           <a className="secondary-button button-link" href="/searches">Manage searches</a>
         </div>
       </section>
@@ -160,55 +217,60 @@ export default async function SourcesPage({
         </table>
       </div>
 
-      <section className="discovery-history" aria-labelledby="discovery-history-title">
+      <section className="source-workflows" aria-labelledby="directory-tools-title">
+        <div>
+          <p className="eyebrow">Private directory tools</p>
+          <h2 id="directory-tools-title">Greenhouse board directory</h2>
+          <p>Bulk files are reviewed locally and stored only in SQLite. Use JSON objects with company, boardToken, canonicalBoardUrl, and enabled fields, or the same CSV headers.</p>
+        </div>
+        <form action={bulkImportGreenhouseBoardsAction}>
+          <label>Reviewed JSON or CSV<input name="directory" type="file" accept=".json,.csv,application/json,text/csv" required /></label>
+          <SubmitButton pendingLabel="Importing…">Bulk import boards</SubmitButton>
+        </form>
+      </section>
+
+      <section className="source-workflows" aria-labelledby="comparison-title">
+        <div>
+          <p className="eyebrow">Private comparison</p>
+          <h2 id="comparison-title">Compare MyGreenhouse URLs</h2>
+          <p>Paste public job URLs only. Credentials are neither requested nor stored, and authenticated pages are not browsed.</p>
+        </div>
+        <form action={compareMyGreenhouseUrlsAction}>
+          <label>One public job URL per line<textarea name="urls" rows={6} required /></label>
+          <SubmitButton pendingLabel="Comparing…">Compare coverage</SubmitButton>
+        </form>
+        {comparisons.length > 0 && (
+          <div className="comparison-results">
+            {comparisons.map((item) => (
+              <article key={item.id}>
+                <span className={`capability capability-${item.status.toLowerCase().replaceAll(" ", "-")}`}>{item.status}</span>
+                <strong>{item.companyName ?? item.boardToken ?? "Unresolved provider"}</strong>
+                <p>{item.reason}</p>
+                <small>{item.submittedUrl}</small>
+                {item.status === "Missing board" && item.boardToken && (
+                  <form action={addMissingGreenhouseBoardAction}>
+                    <input type="hidden" name="boardToken" value={item.boardToken} />
+                    <label>Company name<input name="company" required /></label>
+                    <SubmitButton pendingLabel="Adding…">Add missing board</SubmitButton>
+                  </form>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="provider-capabilities" aria-labelledby="provider-capabilities-title">
         <div className="sources-toolbar">
-          <div><p className="eyebrow">Search history</p><h2 id="discovery-history-title">Discovery history</h2><p>Every search run remains available locally.</p></div>
+          <div><p className="eyebrow">Provider policy</p><h2 id="provider-capabilities-title">Verified provider capabilities</h2><p>Unsupported providers fail closed until an official or clearly permitted public path is verified.</p></div>
         </div>
-        <div className="sources-table-wrap">
-          <table className="sources-table">
-            <thead><tr><th>Started</th><th>Trigger</th><th>Status</th><th>Sources</th><th>Found</th><th>Imports</th><th>Duplicates</th><th>Failures</th><th>Duration</th></tr></thead>
-            <tbody>
-              {batches.map((batch) => (
-                <tr key={batch.id}>
-                  <td>{lastCrawl(batch.startedAt)}</td>
-                  <td>{batch.trigger}</td>
-                  <td>{batch.status}</td>
-                  <td>{batch.connectorsRun}</td>
-                  <td>{batch.jobsDiscovered}</td>
-                  <td>{batch.jobsImported}</td>
-                  <td>{batch.duplicates}</td>
-                  <td>{batch.failures}</td>
-                  <td>{batch.durationMs === null ? "—" : `${batch.durationMs} ms`}</td>
-                </tr>
-              ))}
-              {!batches.length && <tr><td colSpan={9} className="sources-empty">No search runs recorded.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-        <div className="sources-toolbar connector-run-heading">
-          <div><p className="eyebrow">Source activity</p><h2>Recent runs</h2><p>Provider and company outcomes, including isolated failures.</p></div>
-        </div>
-        <div className="sources-table-wrap">
-          <table className="sources-table">
-            <thead><tr><th>Started</th><th>Completed</th><th>Provider</th><th>Company</th><th>Status</th><th>Discovered</th><th>Imports</th><th>Duplicates</th><th>Failures</th><th>Duration</th></tr></thead>
-            <tbody>
-              {recentRuns.map((run) => (
-                <tr key={run.id}>
-                  <td>{lastCrawl(run.startedAt)}</td>
-                  <td>{run.completedAt ? lastCrawl(run.completedAt) : "Running"}</td>
-                  <td>{providerNames.get(run.connector.atsType) ?? run.connector.atsType}</td>
-                  <td>{run.connector.company}</td>
-                  <td>{run.status}</td>
-                  <td>{run.jobsDiscovered}</td>
-                  <td>{run.jobsImported}</td>
-                  <td>{run.duplicates}</td>
-                  <td>{run.failures}</td>
-                  <td>{run.durationMs === null ? "—" : `${run.durationMs} ms`}</td>
-                </tr>
-              ))}
-              {!recentRuns.length && <tr><td colSpan={10} className="sources-empty">No source runs recorded.</td></tr>}
-            </tbody>
-          </table>
+        <div className="capability-grid">
+          {PROVIDER_CAPABILITIES.map((provider) => (
+            <article key={provider.id}>
+              <div><strong>{provider.name}</strong><span className={`capability capability-${provider.capability.toLowerCase().replaceAll(" ", "-")}`}>{provider.capability}</span></div>
+              <p>{provider.reason}</p>
+            </article>
+          ))}
         </div>
       </section>
 

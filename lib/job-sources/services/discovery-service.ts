@@ -50,6 +50,36 @@ export class DiscoveryService {
     return jobs;
   }
 
+  async discoverDetailed(
+    providerId: string,
+    criteria: JobSearchCriteria,
+    context: ProviderContext,
+  ) {
+    const provider = this.registry.get(providerId);
+    const result = provider.discoverDetailed
+      ? await provider.discoverDetailed(criteria, context)
+      : {
+          jobs: await provider.discover(criteria, context),
+          diagnostics: {
+            totalJobsDiscovered: 0,
+            titleMatches: 0,
+            locationMatches: 0,
+            excludedByTitle: 0,
+            excludedByLocation: 0,
+            excludedByEmploymentType: 0,
+            excludedByHardExclusions: 0,
+            closedJobs: 0,
+            excludedJobs: [],
+          },
+        };
+    await this.persistConnector(providerId, context, {
+      health: "Healthy",
+      lastChecked: new Date(),
+      lastSuccessfulFetch: new Date(),
+    });
+    return result;
+  }
+
   async evaluateAndImport(
     providerId: string,
     discovered: DiscoveredJob,

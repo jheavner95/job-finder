@@ -27,6 +27,14 @@ const ROBOTS_TARGETS: Record<string, { url: string; path: string }> = {
     url: "https://www.workable.com/robots.txt",
     path: "/api/accounts/",
   },
+  recruitee: {
+    url: "https://recruitee.com/robots.txt",
+    path: "/api/offers/",
+  },
+  comeet: {
+    url: "https://www.comeet.co/robots.txt",
+    path: "/careers-api/2.0/company/",
+  },
 };
 
 const WORKDAY_PUBLIC_ACCESS_REASON =
@@ -125,7 +133,12 @@ export class ProviderDiscoveryRunner {
         "Warning",
       );
     }
-    const target = ROBOTS_TARGETS[this.providerId];
+    const target = this.providerId === "recruitee" && connectors[0]
+      ? {
+          url: `https://${encodeURIComponent(connectors[0].connectorKey)}.recruitee.com/robots.txt`,
+          path: "/api/offers/",
+        }
+      : ROBOTS_TARGETS[this.providerId];
     if (!target) {
       return this.blockAll(
         connectors,
@@ -189,12 +202,13 @@ export class ProviderDiscoveryRunner {
       let failures = 0;
       let lastError: string | null = null;
       try {
-        const jobs = await this.discovery.discover(
+        const discoveryResult = await this.discovery.discoverDetailed(
           this.providerId,
           criteriaFrom(connector.searchCriteria),
           context,
         );
-        discovered = jobs.length;
+        const jobs = discoveryResult.jobs;
+        discovered = discoveryResult.diagnostics.totalJobsDiscovered || jobs.length;
         for (const job of jobs) {
           try {
             await wait(delayFor(connector, robots.crawlDelay));
@@ -220,6 +234,7 @@ export class ProviderDiscoveryRunner {
           health: failures ? "Warning" : "Healthy",
           robotsPolicy: robots.policy,
           successful: true,
+          diagnostics: discoveryResult.diagnostics,
         });
       } catch (error) {
         failures += 1;
@@ -297,6 +312,7 @@ export class ProviderDiscoveryRunner {
       health: "Healthy" | "Warning" | "Error";
       robotsPolicy: string;
       successful?: boolean;
+      diagnostics?: import("../types").DiscoveryDiagnostics;
     },
   ) {
     const completedAt = new Date();
@@ -317,6 +333,7 @@ export class ProviderDiscoveryRunner {
             provider: this.providerId,
             trigger: this.options.trigger ?? "manual",
             robotsPolicy: result.robotsPolicy,
+            diagnostics: result.diagnostics,
           },
         },
       }),

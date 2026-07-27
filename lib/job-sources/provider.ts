@@ -6,6 +6,7 @@ import type {
   JobSearchCriteria,
   ProviderContext,
   ProviderNormalizedOpportunity,
+  ProviderDiscoveryResult,
   ProviderValidation,
 } from "./types";
 import { normalizePostingContent } from "../job-content";
@@ -17,6 +18,10 @@ export type JobSourceProvider = {
     criteria: JobSearchCriteria,
     context: ProviderContext,
   ): Promise<DiscoveredJob[]>;
+  discoverDetailed?(
+    criteria: JobSearchCriteria,
+    context: ProviderContext,
+  ): Promise<ProviderDiscoveryResult>;
   fetch(
     job: DiscoveredJob,
     context: ProviderContext,
