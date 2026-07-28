@@ -22,6 +22,24 @@ type Provider = {
   duplicates: number;
   closed: number;
   lastError: string | null;
+  accounting: {
+    discovered: number;
+    imported: number;
+    duplicates: number;
+    excluded: number;
+    invalid: number;
+    normalizationFailed: number;
+    persistenceFailed: number;
+  };
+  dispositions: Array<{
+    externalId: string;
+    title: string;
+    disposition: string;
+    score: number | null;
+    errorCode: string | null;
+    message: string | null;
+    jobId: string | null;
+  }>;
   results: Array<{
     id: string;
     title: string;
@@ -175,6 +193,13 @@ function connectionLabel(provider: Provider) {
   if (!provider.configured) return "Not connected";
   if (!provider.enabled) return "Paused";
   return `${provider.enabled} active ${provider.enabled === 1 ? "source" : "sources"}`;
+}
+
+function providerErrorCopy(provider: Provider) {
+  if (provider.id === "smartrecruiters" && provider.status === "Blocked") {
+    return "Unavailable by provider policy";
+  }
+  return provider.lastError;
 }
 
 function activityCopy(event: Snapshot["events"][number]) {
@@ -430,7 +455,7 @@ export function DiscoveryWorkspace({
                   <div><dt>Strong matches</dt><dd>{provider.results.filter((job) => !job.closedAt && (job.score ?? 0) >= 80).length}</dd></div>
                   <div><dt>Last scan</dt><dd>{relative(provider.lastScan)}</dd></div>
                 </dl>
-                {(live?.explanation || provider.lastError) && <p className="provider-last-error"><strong>{live?.errorCode === "RETRY_AFTER" ? "Retry state" : "Last error"}</strong>{live?.explanation ?? provider.lastError}</p>}
+                {(live?.explanation || provider.lastError) && <p className="provider-last-error"><strong>{live?.errorCode === "RETRY_AFTER" ? "Retry state" : provider.id === "smartrecruiters" ? "Provider policy" : "Last error"}</strong>{live?.explanation ?? providerErrorCopy(provider)}</p>}
                 <div className="provider-card-actions">
                   <button className="provider-primary-action" type="button" disabled={running || !provider.connectorIds.length} onClick={() => startScan(provider.connectorIds)}>{provider.configured ? "Scan Provider" : "Setup Required"}</button>
                   <button type="button" onClick={() => {
@@ -454,6 +479,26 @@ export function DiscoveryWorkspace({
             </div>
             <div><span className={`discovery-status status-${statusClass(selected.status)}`}><i />{selected.status}</span><Link href="/sources">Manage configuration →</Link></div>
           </header>
+          <div className="provider-accounting" aria-label={`${selected.name} latest discovery accounting`}>
+            <div className="accounting-total">
+              <small>Latest provider run</small>
+              <strong>{selected.accounting.discovered} discovered</strong>
+              <span>{selected.accounting.discovered === selected.accounting.imported
+                + selected.accounting.duplicates
+                + selected.accounting.excluded
+                + selected.accounting.invalid
+                + selected.accounting.normalizationFailed
+                + selected.accounting.persistenceFailed ? "Reconciled" : "Needs reconciliation"}</span>
+            </div>
+            <dl>
+              <div><dd>{selected.accounting.imported}</dd><dt>Imported</dt></div>
+              <div><dd>{selected.accounting.duplicates}</dd><dt>Duplicates</dt></div>
+              <div><dd>{selected.accounting.excluded}</dd><dt>Excluded</dt></div>
+              <div><dd>{selected.accounting.invalid}</dd><dt>Invalid</dt></div>
+              <div><dd>{selected.accounting.normalizationFailed}</dd><dt>Normalization failed</dt></div>
+              <div><dd>{selected.accounting.persistenceFailed}</dd><dt>Persistence failed</dt></div>
+            </dl>
+          </div>
           <nav className="provider-detail-tabs" aria-label={`${selected.name} results`} role="tablist">
             {[
               ["matched", `Strong matches (${selected.results.filter((job) => !job.closedAt && (job.score ?? 0) >= 80).length})`],
@@ -499,9 +544,25 @@ export function DiscoveryWorkspace({
                   <div><dt>Enabled companies</dt><dd>{selected.enabled}</dd></div>
                   <div><dt>Last successful response</dt><dd>{dateTime(selected.lastScan)}</dd></div>
                 </dl>
+                {selected.lastError && (
+                  <article className="provider-diagnostic-alert">
+                    <strong>{selected.id === "smartrecruiters" ? "Unavailable by provider policy" : "Latest typed provider diagnostic"}</strong>
+                    <span>{selected.status}</span>
+                    <small>{selected.id === "smartrecruiters" ? "Automated discovery is not permitted by the published robots policy." : selected.lastError}</small>
+                  </article>
+                )}
                 {selected.connectors.map((connector) => (
                   <article key={connector.id}><strong>{connector.company}</strong><span>{connector.enabled ? connector.health : "Disabled"}</span><small>Credential: {connector.credentialStatus} · Feed: {connector.feedStatus}</small></article>
                 ))}
+                {selected.dispositions.filter((item) =>
+                  ["INVALID", "NORMALIZATION_FAILED", "PERSISTENCE_FAILED"].includes(item.disposition))
+                  .map((item) => (
+                    <article key={`${item.disposition}-${item.externalId}`} className="disposition-diagnostic">
+                      <strong>{item.title}</strong>
+                      <span>{item.disposition.replaceAll("_", " ")}</span>
+                      <small>{item.errorCode ? `${item.errorCode} · ` : ""}{item.message ?? "No provider detail was supplied."}</small>
+                    </article>
+                  ))}
                 {!selected.connectors.length && <DiscoveryEmpty title="Provider requires configuration" message="Add a company source to establish a provider connection." />}
               </div>
             )}

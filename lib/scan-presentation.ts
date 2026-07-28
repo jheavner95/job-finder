@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { DiscoveryDiagnostics } from "./job-sources/types";
+import type { JobDisposition, JobDispositionCode } from "./job-sources/types";
 
 function diagnostics(value: unknown): DiscoveryDiagnostics | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -33,6 +34,16 @@ function currentStage(value: unknown) {
   return typeof stage === "string" ? stage : null;
 }
 
+function dispositions(value: unknown): JobDisposition[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const items = (value as Record<string, unknown>).dispositions;
+  return Array.isArray(items) ? items as JobDisposition[] : [];
+}
+
+function dispositionCount(items: JobDisposition[], code: JobDispositionCode) {
+  return items.filter((item) => item.disposition === code).length;
+}
+
 export async function getScanSnapshot(database: PrismaClient, batchId?: string | null) {
   const batch = batchId
     ? await database.discoveryBatch.findUnique({
@@ -54,8 +65,14 @@ export async function getScanSnapshot(database: PrismaClient, batchId?: string |
   const imported = batch.crawlRuns.reduce((sum, run) => sum + run.jobsImported, 0);
   const duplicates = batch.crawlRuns.reduce((sum, run) => sum + run.duplicates, 0);
   const failures = batch.crawlRuns.reduce((sum, run) => sum + run.failures, 0);
-  const excluded = batch.crawlRuns.reduce((sum, run) =>
-    sum + (diagnostics(run.metadata)?.excludedJobs.length ?? 0), 0);
+  const allDispositions = batch.crawlRuns.flatMap((run) => dispositions(run.metadata));
+  const excluded = allDispositions.length
+    ? dispositionCount(allDispositions, "EXCLUDED")
+    : batch.crawlRuns.reduce((sum, run) =>
+      sum + (diagnostics(run.metadata)?.excludedJobs.length ?? 0), 0);
+  const invalid = dispositionCount(allDispositions, "INVALID");
+  const normalizationFailed = dispositionCount(allDispositions, "NORMALIZATION_FAILED");
+  const persistenceFailed = dispositionCount(allDispositions, "PERSISTENCE_FAILED");
   const closed = batch.crawlRuns.reduce((sum, run) =>
     sum + (diagnostics(run.metadata)?.closedJobs ?? 0), 0);
   const matches = imported + duplicates;
@@ -124,13 +141,19 @@ export async function getScanSnapshot(database: PrismaClient, batchId?: string |
     imported,
     duplicates,
     excluded,
+    invalid,
+    normalizationFailed,
+    persistenceFailed,
     closed,
     failures,
     durationMs: batch.durationMs ?? now.getTime() - batch.startedAt.getTime(),
     providers: selectedConnectors.map((connector) => {
       const run = batch.crawlRuns.find((crawl) => crawl.connectorId === connector.id);
       const runDiagnostics = diagnostics(run?.metadata);
-      const runExcluded = runDiagnostics?.excludedJobs.length ?? 0;
+      const runDispositions = dispositions(run?.metadata);
+      const runExcluded = runDispositions.length
+        ? dispositionCount(runDispositions, "EXCLUDED")
+        : runDiagnostics?.excludedJobs.length ?? 0;
       return {
         id: connector.id,
         provider: connector.atsType,
@@ -157,7 +180,15 @@ export async function getScanSnapshot(database: PrismaClient, batchId?: string |
         imported: run?.jobsImported ?? 0,
         duplicates: run?.duplicates ?? 0,
         excluded: runExcluded,
-        explanation: run?.lastError ?? null,
+        invalid: dispositionCount(runDispositions, "INVALID"),
+        normalizationFailed: dispositionCount(runDispositions, "NORMALIZATION_FAILED"),
+        persistenceFailed: dispositionCount(runDispositions, "PERSISTENCE_FAILED"),
+        reconciled: run
+          ? run.jobsDiscovered === runDispositions.length
+          : false,
+        explanation: run?.errorCode === "ROBOTS_DENIED"
+          ? "Unavailable by provider policy. Automated discovery is not permitted by robots.txt."
+          : run?.lastError ?? null,
         errorCode: run?.errorCode ?? null,
       };
     }),

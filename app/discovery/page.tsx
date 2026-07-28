@@ -24,6 +24,15 @@ function excludedJobs(value: unknown) {
     : [];
 }
 
+function dispositions(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const items = (value as Record<string, unknown>).dispositions;
+  return Array.isArray(items)
+    ? items.filter((item): item is Record<string, unknown> =>
+      !!item && typeof item === "object" && !Array.isArray(item))
+    : [];
+}
+
 function dateValue(value: Date | null | undefined) {
   return value?.toISOString() ?? null;
 }
@@ -66,6 +75,15 @@ export default async function DiscoveryPage() {
       connector.crawlRuns.map((run) => ({ ...run, company: connector.company })))
       .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
     const latest = runs[0];
+    const latestRuns = latest?.batchId
+      ? runs.filter((run) => run.batchId === latest.batchId)
+      : latest ? [latest] : [];
+    const latestDispositions = latestRuns.flatMap((run) => dispositions(run.metadata));
+    const latestDiscovered = latestRuns.reduce((sum, run) => sum + run.jobsDiscovered, 0);
+    const latestImported = latestRuns.reduce((sum, run) => sum + run.jobsImported, 0);
+    const latestDuplicates = latestRuns.reduce((sum, run) => sum + run.duplicates, 0);
+    const latestFailures = latestRuns.reduce((sum, run) => sum + run.failures, 0);
+    const latestError = latestRuns.find((run) => run.lastError)?.lastError ?? null;
     const enabled = providerConnectors.filter((connector) => connector.enabled);
     const running = runs.some((run) => !run.completedAt);
     const needsConfiguration = providerConnectors.length === 0
@@ -73,12 +91,12 @@ export default async function DiscoveryPage() {
         connector.credentialStatus === "Missing"
         || connector.feedStatus === "Missing");
     const blocked = capability.id === "workday"
-      || latest?.status === "Blocked";
+      || latestRuns.some((run) => run.status === "Blocked");
     const status = running ? "Scanning"
       : blocked ? "Blocked"
         : needsConfiguration ? "Needs Configuration"
           : !enabled.length ? "Disabled"
-            : latest?.failures ? "Error"
+            : latestFailures ? "Error"
               : "Healthy";
     const providerName = providerNames.get(capability.id) ?? capability.name;
     const providerJobs = jobs.filter((job) =>
@@ -107,11 +125,31 @@ export default async function DiscoveryPage() {
       companiesIndexed: providerConnectors.length,
       lastScan: dateValue(latest?.completedAt ?? latest?.startedAt),
       nextScan: dateValue(nextRun),
-      jobsDiscovered: latest?.jobsDiscovered ?? 0,
-      matchedJobs: (latest?.jobsImported ?? 0) + (latest?.duplicates ?? 0),
-      duplicates: latest?.duplicates ?? 0,
+      jobsDiscovered: latestDiscovered,
+      matchedJobs: latestImported + latestDuplicates,
+      duplicates: latestDuplicates,
       closed: providerJobs.filter((job) => job.closedAt).length,
-      lastError: latest?.lastError ?? null,
+      lastError: latestError,
+      accounting: {
+        discovered: latestDiscovered,
+        imported: latestDispositions.filter((item) => item.disposition === "IMPORTED").length,
+        duplicates: latestDispositions.filter((item) => item.disposition === "DUPLICATE").length,
+        excluded: latestDispositions.filter((item) => item.disposition === "EXCLUDED").length,
+        invalid: latestDispositions.filter((item) => item.disposition === "INVALID").length,
+        normalizationFailed: latestDispositions.filter((item) =>
+          item.disposition === "NORMALIZATION_FAILED").length,
+        persistenceFailed: latestDispositions.filter((item) =>
+          item.disposition === "PERSISTENCE_FAILED").length,
+      },
+      dispositions: latestDispositions.map((item) => ({
+        externalId: String(item.externalId ?? ""),
+        title: String(item.title ?? "Untitled posting"),
+        disposition: String(item.disposition ?? "INVALID"),
+        score: typeof item.score === "number" ? item.score : null,
+        errorCode: typeof item.errorCode === "string" ? item.errorCode : null,
+        message: typeof item.message === "string" ? item.message : null,
+        jobId: typeof item.jobId === "string" ? item.jobId : null,
+      })),
       results: providerJobs.map((job) => ({
         id: job.id,
         title: job.title,

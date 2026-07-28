@@ -90,6 +90,60 @@ describe("decision-oriented scan presentation", () => {
       .toEqual(["Running", "Healthy", "Queued"]);
   });
 
+  it("reconciles persisted terminal dispositions in the scan snapshot", async () => {
+    const database = testDatabase();
+    const source = await connector(database, "Accounting");
+    const batch = await database.discoveryBatch.create({
+      data: {
+        trigger: "manual",
+        status: "CompletedWithErrors",
+        completedAt: new Date(),
+        metadata: {
+          plannedConnectors: 1,
+          selectedConnectorIds: [source.id],
+        },
+      },
+    });
+    await database.connectorCrawl.create({
+      data: {
+        connectorId: source.id,
+        batchId: batch.id,
+        status: "CompletedWithErrors",
+        completedAt: new Date(),
+        jobsDiscovered: 6,
+        jobsImported: 1,
+        duplicates: 1,
+        failures: 3,
+        metadata: {
+          dispositions: [
+            { externalId: "1", title: "Imported", canonicalUrl: "https://example.com/1", disposition: "IMPORTED" },
+            { externalId: "2", title: "Duplicate", canonicalUrl: "https://example.com/2", disposition: "DUPLICATE" },
+            { externalId: "3", title: "Excluded", canonicalUrl: "https://example.com/3", disposition: "EXCLUDED" },
+            { externalId: "4", title: "Invalid", canonicalUrl: "https://example.com/4", disposition: "INVALID" },
+            { externalId: "5", title: "Normalize", canonicalUrl: "https://example.com/5", disposition: "NORMALIZATION_FAILED" },
+            { externalId: "6", title: "Persist", canonicalUrl: "https://example.com/6", disposition: "PERSISTENCE_FAILED" },
+          ],
+        },
+      },
+    });
+    await expect(getScanSnapshot(database, batch.id)).resolves.toMatchObject({
+      discovered: 6,
+      imported: 1,
+      duplicates: 1,
+      excluded: 1,
+      invalid: 1,
+      normalizationFailed: 1,
+      persistenceFailed: 1,
+      providers: [{
+        excluded: 1,
+        invalid: 1,
+        normalizationFailed: 1,
+        persistenceFailed: 1,
+        reconciled: true,
+      }],
+    });
+  });
+
   it.each([
     ["Completed", "Healthy"],
     ["CompletedWithErrors", "Warning"],

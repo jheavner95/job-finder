@@ -79,6 +79,41 @@ describe("provider discovery persistence", () => {
     },
   );
 
+  it("fails closed with a typed diagnosis when a robots policy endpoint rejects validation", async () => {
+    const database = testDatabase();
+    const connector = await database.companyConnector.create({
+      data: {
+        company: `Ashby policy ${randomUUID()}`,
+        careerUrl: "https://jobs.ashbyhq.com/example",
+        atsType: "ashby",
+        connectorKey: "example",
+        enabled: true,
+      },
+    });
+    const client = vi.fn<typeof fetch>(async () =>
+      new Response("Unauthorized", { status: 401 }));
+    await expect(new ProviderDiscoveryRunner(
+      database,
+      "ashby",
+      client,
+      undefined,
+      { connectorIds: [connector.id] },
+    ).run()).resolves.toMatchObject({ failures: 1 });
+    await expect(database.connectorCrawl.findFirstOrThrow({
+      where: { connectorId: connector.id },
+    })).resolves.toMatchObject({
+      status: "Blocked",
+      errorCode: "UNEXPECTED_RESPONSE",
+      providerMessage:
+        "The provider robots policy could not be verified because the policy endpoint returned HTTP 401. Discovery failed closed.",
+      diagnosticContext: {
+        robotsUrl: "https://api.ashbyhq.com/robots.txt",
+        path: "/posting-api/job-board/example",
+        status: 401,
+      },
+    });
+  });
+
   it("runs multiple enabled Greenhouse boards in one discovery batch", async () => {
     const database = testDatabase();
     const suffix = randomUUID();
@@ -109,7 +144,13 @@ describe("provider discovery persistence", () => {
         content: "<p>Lead product strategy and design systems.</p>",
         metadata: [],
       };
-      return new Response(JSON.stringify(url.includes(`/jobs/${token}-`) ? job : { jobs: [job] }), {
+      const excluded = {
+        ...job,
+        id: `excluded-${token}-${suffix}`,
+        title: "Account Executive",
+        absolute_url: `https://boards.greenhouse.io/${token}/jobs/excluded-${token}-${suffix}`,
+      };
+      return new Response(JSON.stringify(url.includes(`/jobs/${token}-`) ? job : { jobs: [job, excluded] }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
@@ -124,13 +165,45 @@ describe("provider discovery persistence", () => {
     ).run();
     expect(result).toMatchObject({
       companiesProcessed: 2,
-      jobsDiscovered: 2,
+      jobsDiscovered: 4,
       jobsImported: 2,
       failures: 0,
     });
     expect(await database.connectorCrawl.count({
       where: { connectorId: { in: connectors.map((connector) => connector.id) } },
     })).toBe(2);
+    const crawls = await database.connectorCrawl.findMany({
+      where: { connectorId: { in: connectors.map((connector) => connector.id) } },
+    });
+    expect(crawls.map((crawl) => {
+      const metadata = crawl.metadata as {
+        accounting: Record<string, number | boolean>;
+        dispositions: Array<{ disposition: string }>;
+      };
+      return {
+        accounting: metadata.accounting,
+        dispositions: metadata.dispositions.map((item) => item.disposition).sort(),
+      };
+    })).toEqual([
+      {
+        accounting: expect.objectContaining({
+          discovered: 2,
+          IMPORTED: 1,
+          EXCLUDED: 1,
+          reconciled: true,
+        }),
+        dispositions: ["EXCLUDED", "IMPORTED"],
+      },
+      {
+        accounting: expect.objectContaining({
+          discovered: 2,
+          IMPORTED: 1,
+          EXCLUDED: 1,
+          reconciled: true,
+        }),
+        dispositions: ["EXCLUDED", "IMPORTED"],
+      },
+    ]);
   });
 
   it("cancels an independently running batch and preserves work already in flight", async () => {
@@ -295,6 +368,37 @@ describe("provider discovery persistence", () => {
     }))).toEqual([
       { status: "Completed", imported: 1, duplicates: 0 },
       { status: "Completed", imported: 0, duplicates: 1 },
+    ]);
+    expect(crawls.map((crawl) => {
+      const metadata = crawl.metadata as {
+        accounting: { discovered: number; reconciled: boolean };
+        dispositions: Array<{ disposition: string; jobId?: string; score?: number }>;
+      };
+      return {
+        accounting: metadata.accounting,
+        dispositions: metadata.dispositions,
+      };
+    })).toEqual([
+      {
+        accounting: expect.objectContaining({ discovered: 1, IMPORTED: 1, reconciled: true }),
+        dispositions: [
+          expect.objectContaining({
+            disposition: "IMPORTED",
+            jobId: stored.id,
+            score: expect.any(Number),
+          }),
+        ],
+      },
+      {
+        accounting: expect.objectContaining({ discovered: 1, DUPLICATE: 1, reconciled: true }),
+        dispositions: [
+          expect.objectContaining({
+            disposition: "DUPLICATE",
+            jobId: stored.id,
+            score: expect.any(Number),
+          }),
+        ],
+      },
     ]);
     await expect(database.companyConnector.findUniqueOrThrow({
       where: { id: connector.id },

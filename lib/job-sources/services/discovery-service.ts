@@ -6,11 +6,47 @@ import type { JobSourceRegistry } from "../registry";
 import { jobSourceRegistry } from "../registry";
 import type {
   ConnectorHealth,
+  CanonicalJobPosting,
   DiscoveredJob,
   DiscoveryImportResult,
+  JobDispositionCode,
   JobSearchCriteria,
+  ProviderNormalizedOpportunity,
   ProviderContext,
 } from "../types";
+import { errorPersistence, ProviderError } from "../errors";
+
+export class DiscoveryDispositionError extends Error {
+  readonly name = "DiscoveryDispositionError";
+
+  constructor(
+    readonly disposition: Extract<
+      JobDispositionCode,
+      "INVALID" | "NORMALIZATION_FAILED" | "PERSISTENCE_FAILED"
+    >,
+    readonly errorCode: string,
+    readonly providerMessage: string,
+    readonly diagnosticContext: Record<string, string | number | boolean | null>,
+    options?: ErrorOptions,
+  ) {
+    super(providerMessage, options);
+  }
+}
+
+function dispositionError(
+  disposition: DiscoveryDispositionError["disposition"],
+  error: unknown,
+  fallback: ProviderError,
+) {
+  const typed = errorPersistence(error instanceof Error ? error : fallback);
+  return new DiscoveryDispositionError(
+    disposition,
+    typed.errorCode,
+    typed.providerMessage,
+    typed.diagnosticContext,
+    { cause: error },
+  );
+}
 
 const DISCOVERY_HOSTS = [
   "linkedin.com",
@@ -100,22 +136,64 @@ export class DiscoveryService {
     }
 
     const provider = this.registry.get(providerId);
-    const posting = await provider.fetch(discovered, context);
+    let posting: CanonicalJobPosting;
+    try {
+      posting = await provider.fetch(discovered, context);
+    } catch (error) {
+      throw dispositionError(
+        "NORMALIZATION_FAILED",
+        error,
+        new ProviderError("UNEXPECTED_RESPONSE", "The provider posting could not be retrieved."),
+      );
+    }
     await onStage?.("Normalizing");
-    const opportunity = provider.normalize(posting, context);
+    let opportunity: ProviderNormalizedOpportunity;
+    try {
+      opportunity = provider.normalize(posting, context);
+    } catch (error) {
+      throw dispositionError(
+        "NORMALIZATION_FAILED",
+        error,
+        new ProviderError("SCHEMA_DRIFT", "The provider posting could not be normalized."),
+      );
+    }
     const validation = provider.validate(opportunity);
     if (!validation.valid) {
-      throw new Error(`Provider normalization failed: ${validation.errors.join("; ")}`);
+      throw new DiscoveryDispositionError(
+        "INVALID",
+        "SCHEMA_DRIFT",
+        "The normalized provider posting is invalid.",
+        { validationErrors: validation.errors.join("; ") },
+      );
     }
 
     // This is the certified Live Job Foundation boundary. Scoring,
     // confidence, fingerprinting, duplicate handling, and persistence remain
     // owned by the existing pipeline.
     await onStage?.("Matching");
-    const result = await importJobPreview(
-      this.database,
-      createJobImportPreview(opportunity),
-    );
+    let preview;
+    try {
+      preview = createJobImportPreview(opportunity);
+    } catch (error) {
+      throw dispositionError(
+        "INVALID",
+        error,
+        new ProviderError("SCHEMA_DRIFT", "The normalized job could not be evaluated."),
+      );
+    }
+    let result;
+    try {
+      result = await importJobPreview(
+        this.database,
+        preview,
+      );
+    } catch (error) {
+      throw dispositionError(
+        "PERSISTENCE_FAILED",
+        error,
+        new ProviderError("UNEXPECTED_RESPONSE", "The normalized job could not be persisted."),
+      );
+    }
     return {
       providerId,
       externalId: discovered.externalId,

@@ -6,7 +6,10 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/db";
 import { jobSourceRegistry } from "@/lib/job-sources/registry";
-import { EMPTY_JOB_SEARCH } from "@/lib/job-sources/types";
+import {
+  DEFAULT_PRODUCT_DESIGN_SEARCH,
+  EMPTY_JOB_SEARCH,
+} from "@/lib/job-sources/types";
 import { detectCompanySource, type DetectedCompanySource } from "@/lib/job-sources/detection";
 import { checkRobots } from "@/lib/job-sources/robots";
 import { DiscoveryScheduler } from "@/lib/scheduling/discovery-scheduler";
@@ -170,7 +173,7 @@ export async function addCompanyConnectorAction(formData: FormData) {
     providerId: formData.get("providerId"),
     crawlDelay: formData.get("crawlDelay") || 1_000,
     rateLimit: formData.get("rateLimit") || 60,
-    notes: formData.get("notes"),
+    notes: formData.get("notes") ?? "",
   });
   if (!parsed.success) redirect("/sources?error=invalid-connector");
   try {
@@ -248,7 +251,7 @@ export async function addCompanyConnectorAction(formData: FormData) {
       health: operationalCapability.supportsAuthentication || operationalCapability.supportsFeed ? "Disabled" : "Healthy",
       credentialStatus: operationalCapability.supportsAuthentication ? "Missing" : "NotRequired",
       feedStatus: operationalCapability.supportsFeed ? "Missing" : "NotRequired",
-      searchCriteria: EMPTY_JOB_SEARCH,
+      searchCriteria: DEFAULT_PRODUCT_DESIGN_SEARCH,
       notes: parsed.data.notes || null,
       schedule: {
         create: defaultSchedule,

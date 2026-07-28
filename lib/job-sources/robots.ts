@@ -1,3 +1,5 @@
+import { ProviderError } from "./errors";
+
 export type RobotsDecision = {
   allowed: boolean;
   policy: string;
@@ -101,7 +103,11 @@ export async function checkRobots(
     };
   }
   if (!response.ok) {
-    throw new Error(`Unable to verify robots.txt (${response.status}).`);
+    throw new ProviderError(
+      "UNEXPECTED_RESPONSE",
+      `The provider robots policy could not be verified because the policy endpoint returned HTTP ${response.status}. Discovery failed closed.`,
+      { robotsUrl, path, status: response.status },
+    );
   }
   return evaluateRobots(
     await response.text(),

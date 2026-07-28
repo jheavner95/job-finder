@@ -145,3 +145,25 @@ export type DiscoveryImportResult = {
   score: number;
   confidence: number;
 };
+
+export const JOB_DISPOSITIONS = [
+  "IMPORTED",
+  "DUPLICATE",
+  "EXCLUDED",
+  "INVALID",
+  "NORMALIZATION_FAILED",
+  "PERSISTENCE_FAILED",
+] as const;
+
+export type JobDispositionCode = (typeof JOB_DISPOSITIONS)[number];
+
+export type JobDisposition = {
+  externalId: string;
+  title: string;
+  canonicalUrl: string;
+  disposition: JobDispositionCode;
+  jobId?: string;
+  score?: number;
+  errorCode?: string;
+  message?: string;
+};

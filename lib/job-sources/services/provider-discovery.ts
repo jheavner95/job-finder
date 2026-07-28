@@ -2,9 +2,17 @@ import type { CompanyConnector, Prisma, PrismaClient } from "@prisma/client";
 
 import { checkRobots } from "../robots";
 import { jobSourceRegistry, type JobSourceRegistry } from "../registry";
-import type { JobSearchCriteria, ProviderContext } from "../types";
+import type {
+  JobDisposition,
+  JobDispositionCode,
+  JobSearchCriteria,
+  ProviderContext,
+} from "../types";
 import { DEFAULT_PRODUCT_DESIGN_SEARCH, type CrawlSummary } from "../types";
-import { DiscoveryService } from "./discovery-service";
+import {
+  DiscoveryDispositionError,
+  DiscoveryService,
+} from "./discovery-service";
 import { getOperationalCapability } from "../capabilities";
 import { errorPersistence, ProviderError } from "../errors";
 import {
@@ -60,6 +68,20 @@ function delayFor(connector: CompanyConnector, robotsDelay: number | null) {
     ? Math.ceil(60_000 / connector.rateLimit)
     : 0;
   return Math.max(connector.crawlDelay ?? 0, robotsDelay ?? 0, rateDelay);
+}
+
+function dispositionCounts(dispositions: JobDisposition[]) {
+  return dispositions.reduce<Record<JobDispositionCode, number>>((counts, item) => {
+    counts[item.disposition] += 1;
+    return counts;
+  }, {
+    IMPORTED: 0,
+    DUPLICATE: 0,
+    EXCLUDED: 0,
+    INVALID: 0,
+    NORMALIZATION_FAILED: 0,
+    PERSISTENCE_FAILED: 0,
+  });
 }
 
 async function wait(milliseconds: number) {
@@ -263,6 +285,7 @@ export class ProviderDiscoveryRunner {
       let lastError: string | null = null;
       let lastDiagnostic: ReturnType<typeof errorPersistence> | null = null;
       let cancelled = false;
+      let dispositions: JobDisposition[] = [];
       try {
         await this.updateStage(crawl.id, connector, "Downloading");
         const discoveryResult = await this.discovery.discoverDetailed(
@@ -273,6 +296,13 @@ export class ProviderDiscoveryRunner {
         await this.updateStage(crawl.id, connector, "Parsing");
         const jobs = discoveryResult.jobs;
         discovered = discoveryResult.diagnostics.totalJobsDiscovered || jobs.length;
+        dispositions = discoveryResult.diagnostics.excludedJobs.map((job) => ({
+          externalId: job.externalId,
+          title: job.title,
+          canonicalUrl: job.canonicalUrl,
+          disposition: "EXCLUDED",
+          message: job.detail,
+        }));
         await this.updateProgress(crawl.id, connector, "Parsing", {
           jobsDiscovered: discovered,
           jobsImported: imported,
@@ -294,8 +324,22 @@ export class ProviderDiscoveryRunner {
             );
             if (result.duplicate) duplicates += 1;
             else imported += 1;
+            dispositions.push({
+              externalId: job.externalId,
+              title: job.title,
+              canonicalUrl: job.canonicalUrl,
+              disposition: result.duplicate ? "DUPLICATE" : "IMPORTED",
+              jobId: result.jobId,
+              score: result.score,
+            });
           } catch (error) {
-            const typed = errorPersistence(error);
+            const typed = error instanceof DiscoveryDispositionError
+              ? {
+                  errorCode: error.errorCode as import("../errors").ProviderErrorCode,
+                  providerMessage: error.providerMessage,
+                  diagnosticContext: error.diagnosticContext,
+                }
+              : errorPersistence(error);
             lastDiagnostic = typed;
             if (typed.errorCode === "DELETED") {
               await reconcileExplicitDeletion(this.database, {
@@ -307,6 +351,16 @@ export class ProviderDiscoveryRunner {
             }
             failures += 1;
             lastError = typed.providerMessage;
+            dispositions.push({
+              externalId: job.externalId,
+              title: job.title,
+              canonicalUrl: job.canonicalUrl,
+              disposition: error instanceof DiscoveryDispositionError
+                ? error.disposition
+                : "INVALID",
+              errorCode: typed.errorCode,
+              message: typed.providerMessage,
+            });
           }
           await this.updateProgress(crawl.id, connector, "Matching", {
             jobsDiscovered: discovered,
@@ -326,6 +380,7 @@ export class ProviderDiscoveryRunner {
             health: connector.health === "Error" ? "Error" : "Healthy",
             robotsPolicy: robots.policy,
             diagnostics: discoveryResult.diagnostics,
+            dispositions,
           });
           summary.jobsDiscovered += discovered;
           summary.jobsImported += imported;
@@ -342,6 +397,41 @@ export class ProviderDiscoveryRunner {
             observedAt: new Date(),
           });
         }
+        if (dispositions.length > discovered) {
+          discovered = dispositions.length;
+          failures += 1;
+          lastError = "The provider returned more traceable jobs than its reported discovery total.";
+          lastDiagnostic = {
+            errorCode: "SCHEMA_DRIFT",
+            providerMessage: lastError,
+            diagnosticContext: {
+              providerId: this.providerId,
+              traceableJobs: dispositions.length,
+            },
+          };
+        }
+        while (dispositions.length < discovered) {
+          const missingIndex = dispositions.length + 1;
+          dispositions.push({
+            externalId: `unaccounted-${missingIndex}`,
+            title: "Provider posting without a traceable identity",
+            canonicalUrl: connector.careerUrl,
+            disposition: "INVALID",
+            errorCode: "SCHEMA_DRIFT",
+            message: "The provider reported a discovered job without a corresponding posting or exclusion diagnostic.",
+          });
+          failures += 1;
+          lastError = "The provider reported discovered jobs without traceable posting diagnostics.";
+          lastDiagnostic = {
+            errorCode: "SCHEMA_DRIFT",
+            providerMessage: lastError,
+            diagnosticContext: {
+              providerId: this.providerId,
+              reportedJobs: discovered,
+              traceableJobs: dispositions.length,
+            },
+          };
+        }
         await this.finish(connector, crawl.id, startedAt, {
           status: failures ? "CompletedWithErrors" : "Completed",
           jobsDiscovered: discovered,
@@ -356,6 +446,7 @@ export class ProviderDiscoveryRunner {
           robotsPolicy: robots.policy,
           successful: true,
           diagnostics: discoveryResult.diagnostics,
+          dispositions,
         });
       } catch (error) {
         const typed = errorPersistence(error);
@@ -438,6 +529,7 @@ export class ProviderDiscoveryRunner {
       robotsPolicy: string;
       successful?: boolean;
       diagnostics?: import("../types").DiscoveryDiagnostics;
+      dispositions?: JobDisposition[];
       skipReason?: string;
       errorCode?: import("../errors").ProviderErrorCode;
       providerMessage?: string;
@@ -466,6 +558,14 @@ export class ProviderDiscoveryRunner {
             trigger: this.options.trigger ?? "manual",
             robotsPolicy: result.robotsPolicy,
             diagnostics: result.diagnostics,
+            dispositions: result.dispositions,
+            accounting: result.dispositions
+              ? {
+                  discovered: result.dispositions.length,
+                  ...dispositionCounts(result.dispositions),
+                  reconciled: result.dispositions.length === (result.jobsDiscovered ?? 0),
+                }
+              : undefined,
             skipReason: result.skipReason,
           },
         },
