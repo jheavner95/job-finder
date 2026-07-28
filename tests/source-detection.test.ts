@@ -13,6 +13,8 @@ describe("company career provider detection", () => {
     ["https://apply.workable.com/example-company", "workable", "example-company"],
     ["https://example.jobs.personio.de/?language=en", "personio", "example"],
     ["https://careers.jobscore.com/jobs/example", "jobscore", "example"],
+    ["https://example.teamtailor.com/jobs", "teamtailor", "example"],
+    ["https://jobs.jobvite.com/example/jobs", "jobvite", "example"],
     ["https://example.wd5.myworkdayjobs.com/en-US/careers", "workday", "example"],
   ])("detects %s", (url, providerId, connectorKey) => {
     expect(detectCompanySource(url)).toMatchObject({ providerId, connectorKey });

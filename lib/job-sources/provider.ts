@@ -34,6 +34,7 @@ export type JobSourceProvider = {
   ): ProviderNormalizedOpportunity;
   validate(opportunity: ProviderNormalizedOpportunity): ProviderValidation;
   health(context: ProviderContext): Promise<ConnectorHealth>;
+  validateAuthentication?(context: ProviderContext): Promise<ConnectorHealth>;
 };
 
 export type FetchClient = (

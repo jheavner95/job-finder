@@ -59,6 +59,8 @@ describe("job source engine", () => {
         "comeet",
         "personio",
         "jobscore",
+        "teamtailor",
+        "jobvite",
         "workday",
       ]);
   });

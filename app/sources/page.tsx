@@ -11,6 +11,15 @@ import { scheduleLabel } from "@/lib/scheduling/schedule";
 
 import { AddCompanyForm } from "./AddCompanyForm";
 import {
+  configureTeamtailorCredentialAction,
+  removeTeamtailorCredentialAction,
+  testTeamtailorCredentialAction,
+} from "./teamtailor-credential-actions";
+import {
+  configureJobviteFeedAction,
+  removeJobviteFeedAction,
+} from "./jobvite-feed-actions";
+import {
   addMissingGreenhouseBoardAction,
   bulkImportGreenhouseBoardsAction,
   compareMyGreenhouseUrlsAction,
@@ -193,6 +202,81 @@ export default async function SourcesPage({
                     <strong>{error.title}</strong><p>{error.message}</p>
                     <small>Suggested action: validate the public career URL, then retry.</small>
                   </div>
+                )}
+                {connector.atsType === "teamtailor" && (
+                  <details className="company-technical-details">
+                    <summary>
+                      Teamtailor authorization · {connector.credentialStatus}
+                    </summary>
+                    <p>
+                      Use an employer-issued Public read API key. The key is stored only
+                      in this Mac&apos;s Keychain and is never written to the database.
+                    </p>
+                    <form action={configureTeamtailorCredentialAction}>
+                      <input type="hidden" name="connectorId" value={connector.id} />
+                      <label>
+                        API key
+                        <input name="apiKey" type="password" autoComplete="new-password" required />
+                      </label>
+                      <label>
+                        Data region
+                        <select name="region" defaultValue={connector.credentialRegion ?? "eu"}>
+                          <option value="eu">EU</option>
+                          <option value="na">North America</option>
+                        </select>
+                      </label>
+                      <input type="hidden" name="apiVersion" value="20240404" />
+                      <SubmitButton pendingLabel="Validating…">
+                        {connector.credentialStatus === "Valid" ? "Replace credential" : "Authorize Teamtailor"}
+                      </SubmitButton>
+                    </form>
+                    {connector.credentialStatus === "Valid" && (
+                      <div className="company-card-actions">
+                        <form action={testTeamtailorCredentialAction}>
+                          <input type="hidden" name="connectorId" value={connector.id} />
+                          <SubmitButton pendingLabel="Testing…">Test credential</SubmitButton>
+                        </form>
+                        <form action={removeTeamtailorCredentialAction}>
+                          <input type="hidden" name="connectorId" value={connector.id} />
+                          <SubmitButton className="danger-text-button" pendingLabel="Removing…">
+                            Remove credential
+                          </SubmitButton>
+                        </form>
+                      </div>
+                    )}
+                  </details>
+                )}
+                {connector.atsType === "jobvite" && (
+                  <details className="company-technical-details">
+                    <summary>Jobvite employer feed · {connector.feedStatus}</summary>
+                    <p>
+                      Use only the reviewed feed supplied by the employer. The full URL
+                      is kept in this Mac&apos;s Keychain; only its origin and path are
+                      stored with the connector.
+                    </p>
+                    <form action={configureJobviteFeedAction}>
+                      <input type="hidden" name="connectorId" value={connector.id} />
+                      <label>
+                        Employer-provided feed URL
+                        <input name="feedUrl" type="url" autoComplete="off" required />
+                      </label>
+                      <label>
+                        Jobvite employer ID
+                        <input name="employerId" defaultValue={connector.connectorKey} required />
+                      </label>
+                      <SubmitButton pendingLabel="Certifying…">
+                        {connector.feedStatus === "Valid" ? "Replace feed" : "Validate and enable"}
+                      </SubmitButton>
+                    </form>
+                    {connector.feedStatus === "Valid" && (
+                      <form action={removeJobviteFeedAction}>
+                        <input type="hidden" name="connectorId" value={connector.id} />
+                        <SubmitButton className="danger-text-button" pendingLabel="Removing…">
+                          Remove feed
+                        </SubmitButton>
+                      </form>
+                    )}
+                  </details>
                 )}
                 <div className="company-card-actions">
                   <Link className="source-run button-link" href="/review">View Jobs</Link>

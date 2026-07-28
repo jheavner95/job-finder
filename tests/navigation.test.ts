@@ -12,7 +12,7 @@ describe("workflow navigation", () => {
     ]);
     expect(NAV_GROUPS.map((group) => group.items.map((item) => item.label))).toEqual([
       ["Dashboard", "Daily Briefing", "Review Queue", "Applications"],
-      ["Scan Jobs", "Sources", "Saved Searches", "Import Jobs"],
+      ["Discovery Workspace", "Company Sources", "Scan History", "Saved Searches", "Import Jobs"],
       ["Career Profile", "Career Evidence", "Insights"],
       ["Notifications", "Reports"],
     ]);
@@ -23,8 +23,9 @@ describe("workflow navigation", () => {
       "/briefing",
       "/review",
       "/applications",
-      "/scan",
+      "/discovery",
       "/sources",
+      "/scan",
       "/searches",
       "/import",
       "/context",

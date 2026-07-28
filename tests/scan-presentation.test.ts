@@ -43,7 +43,7 @@ describe("decision-oriented scan presentation", () => {
     await expect(getScanSnapshot(database, "missing-batch")).resolves.toBeNull();
   });
 
-  it("shows real waiting, running, and completed provider units", async () => {
+  it("shows real queued, running, and completed provider units", async () => {
     const database = testDatabase();
     const [complete, active, waiting] = await Promise.all([
       connector(database, "Complete"),
@@ -87,7 +87,7 @@ describe("decision-oriented scan presentation", () => {
       matches: 3,
     });
     expect(snapshot?.providers.map((provider) => provider.state))
-      .toEqual(["Running", "Healthy", "Waiting"]);
+      .toEqual(["Running", "Healthy", "Queued"]);
   });
 
   it.each([

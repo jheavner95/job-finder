@@ -1,6 +1,8 @@
 export type ProviderCapability =
   | "Official public API"
   | "Public job feed"
+  | "Employer-authorized API"
+  | "Employer-provided feed"
   | "Public career page"
   | "Manual canonical import"
   | "Unsupported"
@@ -21,8 +23,10 @@ export type OperationalProviderCapability = {
   supportsPagination: boolean;
   supportsDeletion: boolean;
   supportsAuthentication: boolean;
+  supportsFeed: boolean;
+  authenticationType: "none" | "api-key" | "employer-feed";
   pollingFloorMs: number;
-  defaultSchedule: "Manual" | "Daily";
+  defaultPolling: "Manual" | "Daily";
   requestTimeoutMs: number;
   retryPolicy: {
     maximumAttempts: number;
@@ -31,10 +35,13 @@ export type OperationalProviderCapability = {
   };
   schemaValidator: "adapter";
   diagnosticSupport: "standard";
-  completeFeed: boolean;
+  feedCompleteness: "complete" | "partial";
   robotsTarget: (connector: {
     connectorKey: string;
     careerUrl: string;
+    credentialRegion?: string | null;
+    feedOrigin?: string | null;
+    feedPath?: string | null;
   }) => { url: string; path: string };
 };
 
@@ -44,8 +51,10 @@ const standard = {
   supportsPagination: false,
   supportsDeletion: true,
   supportsAuthentication: false,
+  supportsFeed: false,
+  authenticationType: "none" as const,
   pollingFloorMs: 0,
-  defaultSchedule: "Manual" as const,
+  defaultPolling: "Manual" as const,
   requestTimeoutMs: 15_000,
   retryPolicy: {
     maximumAttempts: 3,
@@ -54,7 +63,7 @@ const standard = {
   },
   schemaValidator: "adapter" as const,
   diagnosticSupport: "standard" as const,
-  completeFeed: true,
+  feedCompleteness: "complete" as const,
 };
 const encoded = (value: string) => encodeURIComponent(value);
 
@@ -87,7 +96,7 @@ export const OPERATIONAL_PROVIDER_CAPABILITIES: OperationalProviderCapability[] 
     ...standard,
     providerId: "smartrecruiters",
     supportsPagination: true,
-    completeFeed: false,
+    feedCompleteness: "partial",
     robotsTarget: ({ connectorKey }) => ({
       url: "https://api.smartrecruiters.com/robots.txt",
       path: `/v1/companies/${encoded(connectorKey)}/postings`,
@@ -129,7 +138,7 @@ export const OPERATIONAL_PROVIDER_CAPABILITIES: OperationalProviderCapability[] 
     ...standard,
     providerId: "jobscore",
     pollingFloorMs: hour,
-    defaultSchedule: "Daily",
+    defaultPolling: "Daily",
     robotsTarget: ({ connectorKey }) => ({
       url: "https://careers.jobscore.com/robots.txt",
       path: `/jobs/${encoded(connectorKey)}/feed.json`,
@@ -137,10 +146,40 @@ export const OPERATIONAL_PROVIDER_CAPABILITIES: OperationalProviderCapability[] 
   },
   {
     ...standard,
+    providerId: "teamtailor",
+    supportsPagination: true,
+    supportsAuthentication: true,
+    authenticationType: "api-key",
+    defaultPolling: "Daily",
+    robotsTarget: ({ credentialRegion }) => {
+      const host = credentialRegion === "na"
+        ? "api.na.teamtailor.com"
+        : "api.teamtailor.com";
+      return {
+        url: `https://${host}/robots.txt`,
+        path: "/v1/jobs",
+      };
+    },
+  },
+  {
+    ...standard,
+    providerId: "jobvite",
+    supportsFeed: true,
+    supportsPagination: true,
+    authenticationType: "employer-feed",
+    pollingFloorMs: hour,
+    defaultPolling: "Daily",
+    robotsTarget: ({ feedOrigin, feedPath }) => ({
+      url: `${feedOrigin ?? "https://invalid.local"}/robots.txt`,
+      path: feedPath ?? "/blocked",
+    }),
+  },
+  {
+    ...standard,
     providerId: "workday",
     supportsRetryAfter: false,
     supportsDeletion: false,
-    completeFeed: false,
+    feedCompleteness: "partial",
     robotsTarget: () => ({
       url: "https://invalid.local/robots.txt",
       path: "/blocked",
@@ -164,10 +203,11 @@ export const PROVIDER_CAPABILITIES: ProviderCapabilityRecord[] = [
   { id: "ashby", name: "Ashby", capability: "Public job feed", implemented: true, reason: "Public job board endpoint." },
   { id: "workable", name: "Workable", capability: "Public job feed", implemented: true, reason: "Public account jobs feed." },
   { id: "smartrecruiters", name: "SmartRecruiters", capability: "Official public API", implemented: true, reason: "Public postings API." },
-  { id: "teamtailor", name: "Teamtailor", capability: "Unsupported", implemented: false, reason: "Official jobs API requires a customer-issued API key, including public-scope access." },
+  { id: "teamtailor", name: "Teamtailor", capability: "Employer-authorized API", implemented: true, reason: "Official jobs API with an explicit employer-issued Public read API key.", documentation: "https://docs.teamtailor.com/" },
+  { id: "jobvite", name: "Jobvite", capability: "Employer-provided feed", implemented: true, reason: "Reviewed employer-provided Jobvite JSON feed; disabled until schema, ownership, completeness, and robots checks pass.", documentation: "https://careers.jobvite.com/careersite/job_feed_api.html" },
   { id: "recruitee", name: "Recruitee", capability: "Official public API", implemented: true, reason: "Official Careers Site API is documented as unauthenticated.", documentation: "https://docs.recruitee.com/reference/intro-to-careers-site-api" },
   { id: "bamboohr", name: "BambooHR", capability: "Unsupported", implemented: false, reason: "Official applicant-tracking jobs API requires authenticated ATS access." },
-  { id: "pinpoint", name: "Pinpoint", capability: "Unsupported", implemented: false, reason: "Official API documentation points to a separate careers JSON endpoint, but its public contract and robots allowance require per-site verification before implementation." },
+  { id: "pinpoint", name: "Pinpoint", capability: "Public job feed", implemented: false, reason: "Certified unauthenticated postings.json feed; connector implementation is the remaining step.", documentation: "https://developers.pinpointhq.com/docs/jobs-json-endpoint" },
   { id: "comeet", name: "Comeet", capability: "Official public API", implemented: true, reason: "Official Careers API uses an employer-scoped public company UID and token.", documentation: "https://developers.comeet.com/reference/careers-api-overview" },
   { id: "personio", name: "Personio", capability: "Public job feed", implemented: true, reason: "Official employer-scoped public XML career-site feed with deterministic locale selection.", documentation: "https://developer.personio.de/docs/retrieving-open-job-positions" },
   { id: "jobscore", name: "JobScore", capability: "Public job feed", implemented: true, reason: "Official employer-scoped public JSON feed; default daily polling with a hard one-hour minimum.", documentation: "https://support.jobscore.com/hc/en-us/articles/202001320-Developers-Guide-to-Job-Feed-APIs" },

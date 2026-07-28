@@ -88,6 +88,7 @@ export class DiscoveryService {
     providerId: string,
     discovered: DiscoveredJob,
     context: ProviderContext,
+    onStage?: (stage: "Normalizing" | "Matching") => Promise<void>,
   ): Promise<DiscoveryImportResult> {
     if (discovered.providerId !== providerId) {
       throw new Error("Discovered job does not belong to the selected provider.");
@@ -100,6 +101,7 @@ export class DiscoveryService {
 
     const provider = this.registry.get(providerId);
     const posting = await provider.fetch(discovered, context);
+    await onStage?.("Normalizing");
     const opportunity = provider.normalize(posting, context);
     const validation = provider.validate(opportunity);
     if (!validation.valid) {
@@ -109,6 +111,7 @@ export class DiscoveryService {
     // This is the certified Live Job Foundation boundary. Scoring,
     // confidence, fingerprinting, duplicate handling, and persistence remain
     // owned by the existing pipeline.
+    await onStage?.("Matching");
     const result = await importJobPreview(
       this.database,
       createJobImportPreview(opportunity),

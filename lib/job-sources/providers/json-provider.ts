@@ -103,7 +103,7 @@ export abstract class JsonJobProvider implements JobSourceProvider {
       jobs,
       diagnostics,
       feed: {
-        complete: getOperationalCapability(this.id).completeFeed,
+        complete: getOperationalCapability(this.id).feedCompleteness === "complete",
         sourceJobIds: allJobs.map((job) => job.id).filter(Boolean),
       },
     };

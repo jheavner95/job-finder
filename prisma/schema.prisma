@@ -347,6 +347,14 @@ model CompanyConnector {
   lastChecked         DateTime?
   lastSuccessfulFetch DateTime?
   notes               String?
+  credentialStatus    String   @default("NotRequired")
+  credentialCheckedAt DateTime?
+  credentialRegion    String?
+  feedStatus          String   @default("NotRequired")
+  feedCheckedAt       DateTime?
+  feedOrigin          String?
+  feedPath            String?
+  feedVersion         String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   crawlRuns           ConnectorCrawl[]

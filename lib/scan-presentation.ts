@@ -27,6 +27,12 @@ function fatalError(value: unknown) {
   return typeof error === "string" ? error : null;
 }
 
+function currentStage(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const stage = (value as Record<string, unknown>).currentStage;
+  return typeof stage === "string" ? stage : null;
+}
+
 export async function getScanSnapshot(database: PrismaClient, batchId?: string | null) {
   const batch = batchId
     ? await database.discoveryBatch.findUnique({
@@ -73,6 +79,7 @@ export async function getScanSnapshot(database: PrismaClient, batchId?: string |
         },
         include: {
           company: true,
+          source: true,
           evaluations: { orderBy: { evaluatedAt: "desc" }, take: 1 },
         },
         orderBy: { firstSeenAt: "desc" },
@@ -129,23 +136,37 @@ export async function getScanSnapshot(database: PrismaClient, batchId?: string |
         provider: connector.atsType,
         company: connector.company,
         state: !run
-          ? batch.status === "Running" ? "Waiting" : "Not run"
+          ? batch.status === "Running" ? "Queued"
+            : batch.status === "Cancelled" ? "Cancelled" : "Not run"
           : !run.completedAt ? "Running"
+            : run.status === "Cancelled" ? "Cancelled"
             : run.status === "Blocked" ? "Blocked"
               : run.status === "Failed" ? "Error"
                 : run.failures > 0 ? "Warning" : "Healthy",
+        stage: !run
+          ? batch.status === "Running" ? "Queued"
+            : batch.status === "Cancelled" ? "Cancelled" : "Not run"
+          : run.status === "Cancelled" ? "Cancelled"
+            : run.completedAt
+              ? run.errorCode === "RETRY_AFTER" || run.errorCode === "RATE_LIMITED"
+                ? "Waiting (Retry-After)"
+                : run.status === "Failed" || run.status === "Blocked" ? "Failed" : "Complete"
+              : currentStage(run.metadata) ?? "Connecting",
         discovered: run?.jobsDiscovered ?? 0,
         matches: (run?.jobsImported ?? 0) + (run?.duplicates ?? 0),
         imported: run?.jobsImported ?? 0,
         duplicates: run?.duplicates ?? 0,
         excluded: runExcluded,
         explanation: run?.lastError ?? null,
+        errorCode: run?.errorCode ?? null,
       };
     }),
     newOpportunities: newOpportunities.map((job) => ({
       id: job.id,
       title: job.title,
       company: job.company.name,
+      provider: job.source.name,
+      location: job.location,
       score: job.evaluations[0]?.score ?? 0,
     })),
     events,

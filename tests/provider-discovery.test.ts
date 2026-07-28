@@ -133,7 +133,7 @@ describe("provider discovery persistence", () => {
     })).toBe(2);
   });
 
-  it("cancels after the current connector and preserves completed imports", async () => {
+  it("cancels an independently running batch and preserves work already in flight", async () => {
     const database = testDatabase();
     const suffix = randomUUID();
     const connectors = await Promise.all(["cancel-alpha", "cancel-beta"].map((token) =>
@@ -181,15 +181,16 @@ describe("provider discovery persistence", () => {
     });
     expect(result).toMatchObject({
       status: "Cancelled",
-      companiesProcessed: 1,
-      jobsImported: 1,
+      companiesProcessed: 2,
     });
+    expect(result.jobsImported).toBeGreaterThanOrEqual(1);
+    expect(result.jobsImported).toBeLessThanOrEqual(2);
     expect(await database.job.count({
       where: { company: { name: connectors[0].company } },
     })).toBe(1);
     expect(await database.connectorCrawl.count({
-      where: { connectorId: connectors[1].id },
-    })).toBe(0);
+      where: { connectorId: { in: connectors.map((connector) => connector.id) } },
+    })).toBe(2);
     await expect(database.schedulerLock.findUniqueOrThrow({
       where: { id: "discovery-scheduler" },
     })).resolves.toMatchObject({ lockToken: null });

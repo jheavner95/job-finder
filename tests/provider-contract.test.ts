@@ -9,6 +9,10 @@ import { PersonioProvider } from "../lib/job-sources/providers/personio";
 import { RecruiteeProvider } from "../lib/job-sources/providers/recruitee";
 import { SmartRecruitersProvider } from "../lib/job-sources/providers/smartrecruiters";
 import { WorkableProvider } from "../lib/job-sources/providers/workable";
+import { TeamtailorProvider } from "../lib/job-sources/providers/teamtailor";
+import { JobviteProvider } from "../lib/job-sources/providers/jobvite";
+import { MemoryCredentialStore } from "../lib/job-sources/credentials";
+import { MemoryEmployerFeedStore } from "../lib/job-sources/employer-feed-config";
 import { executeProviderRequest } from "../lib/job-sources/request-policy";
 import type { ProviderContext } from "../lib/job-sources/types";
 import {
@@ -19,6 +23,12 @@ import { PROVIDER_ERROR_CODES } from "../lib/job-sources/errors";
 import { certifyProviderContract } from "./provider-contract-harness";
 import { jobScoreSingleJob } from "./fixtures/jobscore";
 import { personioSingleJob } from "./fixtures/personio";
+import {
+  teamtailorDetail,
+  teamtailorJob,
+  teamtailorPage,
+} from "./fixtures/teamtailor";
+import { jobviteJob, jobvitePage } from "./fixtures/jobvite";
 
 const baseContext: ProviderContext = {
   company: "Contract Company",
@@ -197,5 +207,53 @@ describe("universal public provider contract", () => {
       runtime: { sleep: async (value) => { sleeps.push(value); }, random: () => 0, now: () => 0 },
     });
     expect(sleeps).toEqual([2_000]);
+  });
+
+  it("certifies Teamtailor through the authenticated universal contract", async () => {
+    const store = new MemoryCredentialStore();
+    await store.set("teamtailor", "contract-teamtailor", {
+      apiKey: "contract-key",
+      region: "eu",
+      apiVersion: "20240404",
+    });
+    await certifyProviderContract({
+      providerId: "teamtailor",
+      createProvider: (client) => new TeamtailorProvider(client, store),
+      context: {
+        ...baseContext,
+        connectorId: "contract-teamtailor",
+        connectorKey: "example",
+        careerUrl: "https://example.teamtailor.com",
+        credentialRegion: "eu",
+      },
+      sourceJobId: "tt-101",
+      canonicalUrl: teamtailorJob.attributes["careersite-job-url"],
+      discoveryBody: json(teamtailorPage([teamtailorJob])),
+      detailBody: json(teamtailorDetail()),
+    });
+  });
+
+  it("certifies Jobvite through the employer-feed universal contract", async () => {
+    const store = new MemoryEmployerFeedStore();
+    await store.set("jobvite", "contract-jobvite", {
+      url: "https://feeds.example.test/jobvite/jobs",
+      employerId: "company-42",
+      schemaVersion: "jobvite-v2",
+    });
+    await certifyProviderContract({
+      providerId: "jobvite",
+      createProvider: (client) => new JobviteProvider(client, store),
+      context: {
+        ...baseContext,
+        connectorId: "contract-jobvite",
+        careerUrl: "https://jobs.jobvite.com/example",
+        feedOrigin: "https://feeds.example.test",
+        feedPath: "/jobvite/jobs",
+        feedVersion: "jobvite-v2",
+      },
+      sourceJobId: "jv-101",
+      canonicalUrl: jobviteJob.detailLink,
+      discoveryBody: json(jobvitePage([jobviteJob])),
+    });
   });
 });

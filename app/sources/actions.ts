@@ -14,6 +14,7 @@ import { nextRunAt } from "@/lib/scheduling/schedule";
 import { GreenhouseProvider } from "@/lib/job-sources/providers/greenhouse";
 import { DiscoveryService } from "@/lib/job-sources/services/discovery-service";
 import { getOperationalCapability } from "@/lib/job-sources/capabilities";
+import { testTeamtailorCredential } from "@/lib/job-sources/services/teamtailor-credential-service";
 
 export type CompanyValidationState = {
   status: "idle" | "verified" | "blocked";
@@ -60,6 +61,26 @@ export async function validateCompanySourceAction(
     { label: "Provider detected", detail: detection.providerName, ok: true },
     { label: "Board identifier found", detail: detection.connectorKey, ok: true },
   ];
+  if (detection.providerId === "teamtailor" || detection.providerId === "jobvite") {
+    const isJobvite = detection.providerId === "jobvite";
+    checks.push({
+      label: isJobvite ? "Employer feed" : "Employer authorization",
+      detail: isJobvite
+        ? "A reviewed employer-provided Jobvite feed is required before discovery can run."
+        : "An employer-issued Public read API key is required before discovery can run.",
+      ok: true,
+    });
+    return {
+      ...base,
+      detection,
+      status: "verified",
+      message: isJobvite
+        ? "Jobvite was detected. Follow the company, then validate its employer-provided feed."
+        : "Teamtailor was detected. Follow the company, then authorize it with an employer-issued API key.",
+      jobsDiscovered: 0,
+      checks,
+    };
+  }
   const url = new URL(careerUrl);
   try {
     const pageResponse = await fetch(careerUrl, {
@@ -188,7 +209,7 @@ export async function addCompanyConnectorAction(formData: FormData) {
   }
 
   const operationalCapability = getOperationalCapability(parsed.data.providerId);
-  const defaultSchedule = operationalCapability.defaultSchedule === "Daily"
+  const defaultSchedule = operationalCapability.defaultPolling === "Daily"
     ? {
         scheduleType: "Daily",
         timeOfDay: "08:00",
@@ -202,8 +223,10 @@ export async function addCompanyConnectorAction(formData: FormData) {
       careerUrl: parsed.data.careerUrl,
       atsType: parsed.data.providerId,
       connectorKey: parsed.data.connectorKey,
-      enabled: true,
-      health: "Healthy",
+      enabled: !operationalCapability.supportsAuthentication && !operationalCapability.supportsFeed,
+      health: operationalCapability.supportsAuthentication || operationalCapability.supportsFeed ? "Disabled" : "Healthy",
+      credentialStatus: operationalCapability.supportsAuthentication ? "Missing" : "NotRequired",
+      feedStatus: operationalCapability.supportsFeed ? "Missing" : "NotRequired",
       crawlDelay: parsed.data.crawlDelay,
       rateLimit: parsed.data.rateLimit,
       notes: parsed.data.notes || null,
@@ -221,8 +244,10 @@ export async function addCompanyConnectorAction(formData: FormData) {
       connectorKey: parsed.data.connectorKey,
       crawlDelay: parsed.data.crawlDelay,
       rateLimit: parsed.data.rateLimit,
-      enabled: true,
-      health: "Healthy",
+      enabled: !operationalCapability.supportsAuthentication && !operationalCapability.supportsFeed,
+      health: operationalCapability.supportsAuthentication || operationalCapability.supportsFeed ? "Disabled" : "Healthy",
+      credentialStatus: operationalCapability.supportsAuthentication ? "Missing" : "NotRequired",
+      feedStatus: operationalCapability.supportsFeed ? "Missing" : "NotRequired",
       searchCriteria: EMPTY_JOB_SEARCH,
       notes: parsed.data.notes || null,
       schedule: {
@@ -458,6 +483,20 @@ export async function runScheduledDiscoveryAction() {
 export async function toggleConnectorAction(formData: FormData) {
   const connectorId = String(formData.get("connectorId") ?? "");
   const enabled = formData.get("enabled") === "true";
+  const current = await prisma.companyConnector.findUnique({
+    where: { id: connectorId },
+    select: { atsType: true, credentialStatus: true, feedStatus: true },
+  });
+  if (
+    enabled
+    && current?.atsType === "teamtailor"
+    && current.credentialStatus !== "Valid"
+  ) {
+    redirect("/sources?error=teamtailor-authentication-required");
+  }
+  if (enabled && current?.atsType === "jobvite" && current.feedStatus !== "Valid") {
+    redirect("/sources?error=jobvite-feed-required");
+  }
   await prisma.companyConnector.update({
     where: { id: connectorId },
     data: {
@@ -473,6 +512,15 @@ export async function validateConnectorAction(formData: FormData) {
   const connectorId = String(formData.get("connectorId") ?? "");
   const connector = await prisma.companyConnector.findUnique({ where: { id: connectorId } });
   if (!connector) redirect("/sources?error=unavailable-connector");
+  if (connector.atsType === "teamtailor") {
+    try {
+      await testTeamtailorCredential(prisma, connector.id);
+    } catch {
+      redirect("/sources?validationFailed=1&error=teamtailor-authentication-failed");
+    }
+    revalidatePath("/sources");
+    redirect(`/sources?validated=1&company=${encodeURIComponent(connector.company)}`);
+  }
   const startedAt = new Date();
   try {
     const jobs = await jobSourceRegistry.get(connector.atsType).discover(EMPTY_JOB_SEARCH, {
@@ -480,6 +528,9 @@ export async function validateConnectorAction(formData: FormData) {
       careerUrl: connector.careerUrl,
       connectorKey: connector.connectorKey,
       enabled: true,
+      feedOrigin: connector.feedOrigin,
+      feedPath: connector.feedPath,
+      feedVersion: connector.feedVersion,
       robotsPolicy: connector.robotsPolicy,
       crawlDelay: connector.crawlDelay,
       rateLimit: connector.rateLimit,

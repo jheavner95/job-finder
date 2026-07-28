@@ -16,9 +16,11 @@ Robots certification is necessarily host-specific. Before enabling any board, Jo
 ## Executive decision
 
 The live connectors are concentrated in the safest part of the ecosystem.
-**Personio was implemented in DP-2.2A and JobScore in DP-2.2B.** The strongest
-next addition is an employer-authorized Teamtailor connector. **Teamtailor,
-Breezy HR, Jobvite, Pinpoint, iCIMS, Oracle Recruiting Cloud, SAP
+**Personio was implemented in DP-2.2A, JobScore in DP-2.2B, the
+employer-authorized Teamtailor connector in DP-2.2C, and the reviewed
+employer-feed Jobvite connector in DP-2.2D. Pinpoint was certified as a
+supported public provider in DP-2.2E.** **Breezy HR,
+iCIMS, Oracle Recruiting Cloud, SAP
 SuccessFactors, Dayforce, UKG, BambooHR, JazzHR, Rippling, and Zoho Recruit
 should not be implemented as generic crawlers without a separately certified
 public contract.** Workday's undocumented `/wday/cxs` route remains **DO NOT
@@ -28,9 +30,9 @@ The recommended DP-2.2 sequence is:
 
 1. DP-2.2A — Personio XML feed — **implemented**
 2. DP-2.2B — JobScore JSON feed — **implemented**
-3. DP-2.2C — Teamtailor employer-authorized API connector
-4. DP-2.2D — Jobvite employer-provided feed connector
-5. DP-2.2E — Pinpoint contract-validation spike; implement only if the vendor confirms the public feed contract
+3. DP-2.2C — Teamtailor employer-authorized API connector — **implemented**
+4. DP-2.2D — Jobvite employer-provided feed connector — **implemented**
+5. DP-2.2E — Pinpoint public provider certification — **SUPPORTED; implementation pending**
 
 ## Provider coverage matrix
 
@@ -45,11 +47,11 @@ Complexity includes discovery, normalization, pagination, deletion handling, tes
 | Workable | Broad SMB/mid-market ATS | Official endpoint returns public account jobs: `GET workable.com/api/accounts/{subdomain}?details=true` | Unauthenticated employer-scoped collection; no documented pagination on this public endpoint | `shortcode`, job/application/short URLs and publish date; strong duplicate key | **SUPPORTED — implemented** | Low; public endpoint has fewer guarantees than SPI v3, so monitor schema | P1/current |
 | Recruitee | European/global SMB and mid-market ATS | Official Careers Site API: `GET {company}.recruitee.com/api/offers/`; documentation explicitly says no authorization | Unauthenticated; filters by department/tag; no documented paging contract | Offer ID/slug and `careers_url`; closed offers disappear; consistent tenant host | **SUPPORTED — implemented** | Low; documentation is marked work in progress | P1/current |
 | Comeet | Mid-market collaborative recruiting ATS | Official Careers API: `GET comeet.co/careers-api/2.0/company/{uid}/positions?token=...` | Public-at-runtime company UID and token, but employer/admin must expose them; IP throttling is documented without a numeric threshold | Position UID and hosted URL; published records only; updates may lag by minutes | **SUPPORTED — implemented** | Medium; token onboarding and throttling require care | P2/current |
-| Teamtailor | Strong European/mid-market ATS | Official jobs API exists, but API access uses an employer-issued key even for public-scope data; public career pages are tenant-hosted | Authentication required; JSON:API pagination is available to authorized clients | Strong IDs and URLs when authorized; no safe global board-token discovery contract established | **LIMITED** | Medium with employer consent; High as unsolicited discovery | P2 |
+| Teamtailor | Strong European/mid-market ATS | Official jobs API exists, but API access uses an employer-issued key even for public-scope data; public career pages are tenant-hosted | Authentication required; JSON:API cursor pagination; keys remain in the local macOS Keychain | Strong IDs and URLs; complete-feed reconciliation only after all pages succeed | **LIMITED — authorized mode implemented** | Medium with explicit employer consent; unsolicited discovery remains prohibited | P2/current |
 | Breezy HR | SMB ATS | Official positions endpoint exists, but documentation requires an Authorization header. Hosted career pages are public; no unauthenticated feed contract was found | API token required; position-state filtering; rate contract not established for public discovery | API model has ID, friendly ID, remote/location, department and description; public-page deletion semantics undocumented | **LIMITED** | Medium with employer token; High otherwise | P3 |
-| Jobvite | Established mid-market/enterprise ATS | Vendor supports customer career sites and job feeds/integrations, but no generally available unauthenticated cross-tenant API contract was found | Employer/partner configuration required; feed paging and rate behavior depend on provisioned integration | Requisition IDs and hosted links are generally stable when a feed is provisioned; tenant variants raise regression risk | **LIMITED** | Medium with supplied feed; Very High for HTML estate | P2 |
+| Jobvite | Established mid-market/enterprise ATS | Documented paid JSON Job Feed/Get Job API; connector accepts only a reviewed employer-provided feed and never discovers endpoints | Employer provision required; same-origin paging; full URL remains in macOS Keychain; one-hour floor and daily default protect the documented 500-call daily limit | `eId`, `companyId`, detail/apply links and publication state are strictly certified; complete-feed reconciliation only after successful imports | **LIMITED — employer feed implemented** | Medium with supplied feed; generic crawling remains prohibited | P2/current |
 | JobScore | SMB/mid-market ATS | Official public JSON/XML/JSONP feed: `careers.jobscore.com/jobs/{company}/feed.json` | No read authentication documented; vendor says poll no more than hourly and recommends daily; `limit`, department filter, sorting | Stable `id`, `detail_url`, `apply_url`, opened/updated dates; unpublished jobs excluded | **SUPPORTED — implemented** | Low; honor one-hour hard polling floor | P1/current |
-| Pinpoint | Mid-market ATS | Public careers sites expose jobs and vendor material references careers integrations, but the audit found no authoritative unauthenticated feed specification defining stability, rate, or reuse | Public contract unverified; do not infer permission from frontend JSON | Tenant job identifiers/URLs appear usable, but deletion and schema guarantees are uncertified | **LIMITED — contract validation required** | Medium if confirmed; High otherwise | P2 spike |
+| Pinpoint | Mid-market ATS | Official unauthenticated `https://{subdomain}.pinpointhq.com/postings.json` endpoint is documented for displaying current postings externally and is CORS-enabled | No authentication; one unpaginated data collection; locales and filters documented; no feed-specific numeric rate ceiling | Unique posting `id`, canonical `url`, nested job/requisition IDs; absence from a successful unfiltered complete feed supports reconciliation | **SUPPORTED — certified, implementation pending** | Medium; unversioned schema and locale/multiple-posting semantics require strict tests | P1/next |
 | Personio | European SMB/mid-market HRIS/ATS | Official public XML career-site feed: `https://{company}.jobs.personio.de/xml?language=en` | Public employer-scoped XML feed; languages are explicit; each tenant is robots-certified | Numeric position ID; rich description blocks, office, department, employment type; canonical job URL follows Personio's documented `/job/{id}` format | **SUPPORTED — implemented** | Low–Medium; strict XML and deterministic single-locale parsing | P1/current |
 | iCIMS | Major enterprise ATS | Public tenant career pages exist. Official platform APIs require establishing authentication; no universal unauthenticated jobs API contract was found | Authenticated API; highly configurable tenant pages and domains | Job IDs are usually stable, but URLs, HTML and search endpoints vary by tenant; high duplicate and regression risk across branded sites | **LIMITED** | Very High without an iCIMS-approved feed; Medium with one | P3 |
 | Oracle Recruiting Cloud | Major global enterprise HCM | Oracle documents Recruiting Job Requisition REST resources, but examples require tenant credentials/Bearer access. Candidate career sites are public but their search transport is not certified as a public integration API | Authentication required for official APIs; tenant configuration and localization are extensive | Strong requisition IDs internally; public URL shape and withdrawn-job behavior vary by career site | **UNSUPPORTED** | Very High; high legal and regression risk for frontend reverse engineering | P4 |
@@ -127,12 +129,12 @@ Required connector controls:
 
 - **Personio:** documented XML feed, stable position ID, rich normalization, employer-scoped URL.
 - **JobScore:** documented JSON feed, explicit polling rules, stable IDs and canonical/apply links.
+- **Pinpoint:** certified public `postings.json` feed; implementation pending.
 
 ### Priority 2 — useful coverage with controlled onboarding
 
 - **Teamtailor:** only as employer-authorized API access.
 - **Jobvite:** only for an employer-provided feed.
-- **Pinpoint:** first run a vendor-contract certification spike; do not ship from observed frontend behavior.
 - Existing Comeet remains operationally Priority 2 because onboarding requires a company UID/token.
 
 ### Priority 3 — selective, employer-authorized integrations
@@ -152,8 +154,9 @@ There is no defensible public source for ATS market-share-weighted job coverage 
 The auditable topology measure is:
 
 - Requested providers audited: **23**
-- Current practical public connectors: **9/23 (39.1% of audited provider types)**
-- After consent-bound Priority 2 candidates: up to **12/23 (52.2%)**, but only for employers that authorize access or expose the certified feed
+- Current implemented connectors: **11/23 (47.8% of audited provider types)**:
+  nine public, one employer-authorized API, and one employer-provided feed
+- After implementing certified Pinpoint support: **12/23 (52.2%)**
 
 These are provider-type counts, not job-market coverage. Actual ecosystem coverage must be measured in a later sampling phase by taking a fixed, reviewed employer cohort, identifying each employer's ATS from its canonical careers URL, and reporting:
 
@@ -175,7 +178,7 @@ Status: **Certified.**
 - Stable typed provider errors persist code, safe provider message, and context
 - One capability-derived request/retry/polling/robots execution layer
 - Auditable complete-feed and explicit-deletion reconciliation
-- Universal nine-provider contract harness
+- Universal provider contract harness
 - Dedicated contract documentation for every implemented public connector
 
 ### DP-2.2R — Public connector architecture review
@@ -207,27 +210,43 @@ Status: **Implemented.**
 
 ### DP-2.2C — Teamtailor authorized mode
 
-- Credential storage remains local; never infer or harvest keys
-- JSON:API pagination, rate/backoff and permissions tests
-- Connector is disabled until the employer/user supplies authorized access
+Status: **Implemented.**
+
+- Employer-issued API keys remain in macOS Keychain; keys are never inferred,
+  harvested, logged, or persisted to SQLite
+- Complete JSON:API pagination, shared rate/backoff policy, authentication
+  expiry detection, and authorized contract tests
+- Connector remains disabled until credential validation succeeds
 
 ### DP-2.2D — Jobvite feed mode
 
-- Accept a reviewed employer-provided feed URL only
-- Certify schema, canonical URLs, paging, rate policy and deletion semantics before enabling
+Status: **Implemented.**
+
+- Accepts a reviewed employer-provided feed URL only; the full URL remains in
+  macOS Keychain
+- Certifies schema, ownership, canonical URLs, pagination, robots, and
+  completeness before enabling
+- Uses shared request/retry policy and reconciles deletions only after every
+  matched import succeeds
 
 ### DP-2.2E — Pinpoint certification spike
 
-- Obtain vendor confirmation or authoritative public-feed documentation
-- Validate robots, stable schema, identifiers, URLs, pagination, rate limits and published-only behavior
-- Exit with either a separately scoped implementation phase or **UNSUPPORTED**; no speculative adapter
+Status: **Certified as SUPPORTED.**
+
+- Official unauthenticated `postings.json` feed fits the Public Provider pattern
+- Unique posting identity, canonical URLs, published schema, deterministic
+  locales, and complete-feed reconciliation are feasible
+- No authenticated API, employer feed, scraping, or new architecture is needed
+- See the [Pinpoint certification report](pinpoint-certification-spike.md)
 
 ## Evidence register
 
 Repository evidence:
 
 - `lib/job-sources/capabilities.ts` records current capability decisions.
-- `lib/job-sources/providers/` contains the nine live public connectors and the deliberately blocked Workday adapter.
+- `lib/job-sources/providers/` contains nine live public connectors, the
+  authorized Teamtailor API connector, the employer-feed Jobvite connector,
+  and the deliberately blocked Workday adapter.
 - `lib/job-sources/services/provider-discovery.ts` stops Workday before calling its undocumented route.
 - `tests/job-sources.test.ts` and `tests/provider-discovery.test.ts` certify normalization, canonical URLs, duplicates, scheduled discovery and provider warnings.
 
@@ -243,6 +262,9 @@ Primary vendor evidence:
 - [JobScore Job Feed API](https://support.jobscore.com/hc/en-us/articles/202001320-Developers-Guide-to-Job-Feed-APIs)
 - [Personio open-position XML feed](https://developer.personio.de/docs/retrieving-open-job-positions)
 - [Teamtailor API authentication and public-data scope](https://docs.teamtailor.com/)
+- [Jobvite Job Feed API Integration Guidelines](https://careers.jobvite.com/careersite/job_feed_api.html)
+- [Pinpoint Job Postings JSON Endpoint](https://developers.pinpointhq.com/docs/jobs-json-endpoint)
+- [Pinpoint API rate limits](https://developers.pinpointhq.com/docs/rate-limits)
 - [Breezy positions API](https://developer.breezy.hr/reference/company-positions)
 - [BambooHR ATS job summaries](https://documentation.bamboohr.com/reference/get-job-summaries)
 - [Zoho Recruit OAuth requirement](https://help.zoho.com/portal/en/kb/recruit/developer-guide/oauth-authentication/overview/articles/oauth-overview)
@@ -254,7 +276,8 @@ Primary vendor evidence:
 
 ## Certification conclusion
 
-Personio and JobScore are implemented. Proceed only with employer-authorized
-systems through explicit credential/feed onboarding. Preserve the Workday
+Personio, JobScore, Teamtailor authorized mode, and Jobvite employer-feed mode
+are implemented. Proceed with other employer-authorized systems only through
+explicit credential/feed onboarding. Preserve the Workday
 block. Re-audit vendor documentation and the exact tenant's robots policy
 immediately before implementing or enabling any connector.

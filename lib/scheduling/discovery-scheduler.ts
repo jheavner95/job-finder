@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import { jobSourceRegistry, type JobSourceRegistry } from "../job-sources/registry";
 import { ProviderDiscoveryRunner } from "../job-sources/services/provider-discovery";
 import type { CrawlSummary } from "../job-sources/types";
+import { errorPersistence } from "../job-sources/errors";
 import {
   InAppNotificationPublisher,
   type NotificationPublisher,
@@ -81,12 +82,12 @@ export class DiscoveryScheduler {
           },
         },
       });
-      for (const connector of connectors) {
+      const connectorResults = await Promise.all(connectors.map(async (connector) => {
         const cancellation = await this.database.discoveryBatch.findUnique({
           where: { id: batch.id },
           select: { cancelRequested: true },
         });
-        if (cancellation?.cancelRequested) break;
+        if (cancellation?.cancelRequested) return null;
         try {
           const result = await new ProviderDiscoveryRunner(
             this.database,
@@ -99,7 +100,6 @@ export class DiscoveryScheduler {
               trigger: options.trigger,
             },
           ).run();
-          this.addSummary(summary, result);
           if (result.failures > 0) {
             await this.notifications.publish({
               type: "connector_failure",
@@ -113,8 +113,9 @@ export class DiscoveryScheduler {
               },
             });
           }
+          return result;
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Connector execution failed.";
+          const typed = errorPersistence(error);
           const completedAt = new Date();
           await this.database.$transaction([
             this.database.connectorCrawl.create({
@@ -126,7 +127,10 @@ export class DiscoveryScheduler {
                 completedAt,
                 durationMs: 0,
                 failures: 1,
-                lastError: message,
+                lastError: typed.providerMessage,
+                errorCode: typed.errorCode,
+                providerMessage: typed.providerMessage,
+                diagnosticContext: typed.diagnosticContext,
                 metadata: {
                   provider: connector.atsType,
                   company: connector.company,
@@ -140,16 +144,14 @@ export class DiscoveryScheduler {
               data: {
                 health: "Error",
                 lastChecked: completedAt,
-                notes: message,
+                notes: typed.providerMessage,
               },
             }),
           ]);
-          summary.companiesProcessed += 1;
-          summary.failures += 1;
           await this.notifications.publish({
             type: "connector_failure",
             title: `${connector.company} discovery failed`,
-            message,
+            message: typed.providerMessage,
             href: "/sources",
             metadata: {
               batchId: batch.id,
@@ -157,6 +159,14 @@ export class DiscoveryScheduler {
               company: connector.company,
             },
           });
+          return {
+            companiesProcessed: 1,
+            jobsDiscovered: 0,
+            jobsImported: 0,
+            duplicates: 0,
+            failures: 1,
+            durationMs: 0,
+          };
         } finally {
           if (options.trigger === "scheduled" && connector.schedule) {
             await this.database.connectorSchedule.update({
@@ -173,7 +183,10 @@ export class DiscoveryScheduler {
             });
           }
         }
-      }
+      }));
+      connectorResults.forEach((result) => {
+        if (result) this.addSummary(summary, result);
+      });
 
       const completedAt = new Date();
       const cancellation = await this.database.discoveryBatch.findUnique({
@@ -213,7 +226,7 @@ export class DiscoveryScheduler {
       return { batchId: batch.id, status, ...summary };
     } catch (error) {
       const completedAt = new Date();
-      const message = error instanceof Error ? error.message : "Job scan failed.";
+      const typed = errorPersistence(error);
       summary.failures += 1;
       summary.durationMs = completedAt.getTime() - startedAt.getTime();
       await this.database.discoveryBatch.update({
@@ -227,13 +240,17 @@ export class DiscoveryScheduler {
           jobsImported: summary.jobsImported,
           duplicates: summary.duplicates,
           failures: summary.failures,
-          metadata: { fatalError: message },
+          metadata: {
+            fatalError: typed.providerMessage,
+            errorCode: typed.errorCode,
+            diagnosticContext: typed.diagnosticContext,
+          },
         },
       });
       await this.notifications.publish({
         type: "connector_failure",
         title: "Job scan failed",
-        message,
+        message: typed.providerMessage,
         href: `/scan?batchId=${batch.id}`,
         metadata: { batchId: batch.id, trigger: options.trigger },
       });

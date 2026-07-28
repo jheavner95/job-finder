@@ -93,6 +93,20 @@ Provider transports remain responsible only for endpoint construction, schema
 parsing, and mapping documented fields. Execution, policy, diagnostics,
 identity, persistence, and reconciliation are platform responsibilities.
 
+Teamtailor is the reference authenticated connector. Employer-issued API keys
+are validated before storage and kept in macOS Keychain, never SQLite.
+Connectors remain disabled until authorization succeeds. Credential validation
+precedes robots validation; complete JSON:API pagination must finish before
+reconciliation can close an absent posting. See the
+[Teamtailor connector contract](teamtailor-connector.md).
+
+Jobvite is the reference employer-provided feed connector. Its reviewed feed
+URL is kept in macOS Keychain, while declarative capabilities drive polling,
+robots, retry, pagination, and reconciliation behavior. Feed onboarding
+certifies schema, ownership, stable identity, canonical URLs, and completeness
+before enabling discovery. See the
+[Jobvite connector contract](jobvite-connector.md).
+
 ## Deliberate boundaries
 
 The application remains local, private, and single-user. Discovery is limited

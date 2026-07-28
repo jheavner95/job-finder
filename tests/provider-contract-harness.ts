@@ -36,7 +36,7 @@ export async function certifyProviderContract(input: {
     : null;
   expect(result, `${input.providerId} must expose detailed discovery`).not.toBeNull();
   expect(result?.feed).toEqual({
-    complete: capability.completeFeed,
+    complete: capability.feedCompleteness === "complete",
     sourceJobIds: [input.sourceJobId],
   });
   expect(result?.diagnostics.totalJobsDiscovered).toBe(1);

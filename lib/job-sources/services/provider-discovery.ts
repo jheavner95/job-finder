@@ -6,7 +6,7 @@ import type { JobSearchCriteria, ProviderContext } from "../types";
 import { DEFAULT_PRODUCT_DESIGN_SEARCH, type CrawlSummary } from "../types";
 import { DiscoveryService } from "./discovery-service";
 import { getOperationalCapability } from "../capabilities";
-import { errorPersistence } from "../errors";
+import { errorPersistence, ProviderError } from "../errors";
 import {
   reconcileCompleteFeed,
   reconcileExplicitDeletion,
@@ -40,6 +40,7 @@ function criteriaFrom(value: Prisma.JsonValue | null): JobSearchCriteria {
 
 function contextFrom(connector: CompanyConnector): ProviderContext {
   return {
+    connectorId: connector.id,
     company: connector.company,
     careerUrl: connector.careerUrl,
     connectorKey: connector.connectorKey,
@@ -47,6 +48,10 @@ function contextFrom(connector: CompanyConnector): ProviderContext {
     robotsPolicy: connector.robotsPolicy,
     crawlDelay: connector.crawlDelay,
     rateLimit: connector.rateLimit,
+    credentialRegion: connector.credentialRegion,
+    feedOrigin: connector.feedOrigin,
+    feedPath: connector.feedPath,
+    feedVersion: connector.feedVersion,
   };
 }
 
@@ -129,6 +134,63 @@ export class ProviderDiscoveryRunner {
         },
       });
       summary.companiesProcessed += 1;
+      await this.updateStage(crawl.id, connector, "Connecting");
+
+      if (capability.supportsAuthentication) {
+        const provider = this.registry.get(this.providerId);
+        if (!provider.validateAuthentication) {
+          const missing = new ProviderError(
+            "INVALID_CONFIGURATION",
+            "The authenticated provider does not implement credential validation.",
+            { providerId: this.providerId },
+          );
+          const typed = errorPersistence(missing);
+          await this.finish(connector, crawl.id, startedAt, {
+            status: "Blocked",
+            failures: 1,
+            lastError: typed.providerMessage,
+            errorCode: typed.errorCode,
+            providerMessage: typed.providerMessage,
+            diagnosticContext: typed.diagnosticContext,
+            health: "Error",
+            robotsPolicy: "unverified",
+          });
+          summary.failures += 1;
+          continue;
+        }
+        try {
+          await provider.validateAuthentication(contextFrom(connector));
+          await this.database.companyConnector.update({
+            where: { id: connector.id },
+            data: {
+              credentialStatus: "Valid",
+              credentialCheckedAt: new Date(),
+            },
+          });
+        } catch (error) {
+          const typed = errorPersistence(error);
+          await this.finish(connector, crawl.id, startedAt, {
+            status: "Blocked",
+            failures: 1,
+            lastError: typed.providerMessage,
+            errorCode: typed.errorCode,
+            providerMessage: typed.providerMessage,
+            diagnosticContext: typed.diagnosticContext,
+            health: "Warning",
+            robotsPolicy: "unverified",
+          });
+          await this.database.companyConnector.update({
+            where: { id: connector.id },
+            data: {
+              enabled: false,
+              credentialStatus: typed.errorCode === "AUTH_EXPIRED" ? "Expired" : "Missing",
+              credentialCheckedAt: new Date(),
+            },
+          });
+          summary.failures += 1;
+          continue;
+        }
+      }
 
       if (
         capability.pollingFloorMs > 0
@@ -200,21 +262,35 @@ export class ProviderDiscoveryRunner {
       let failures = 0;
       let lastError: string | null = null;
       let lastDiagnostic: ReturnType<typeof errorPersistence> | null = null;
+      let cancelled = false;
       try {
+        await this.updateStage(crawl.id, connector, "Downloading");
         const discoveryResult = await this.discovery.discoverDetailed(
           this.providerId,
           criteriaFrom(connector.searchCriteria),
           context,
         );
+        await this.updateStage(crawl.id, connector, "Parsing");
         const jobs = discoveryResult.jobs;
         discovered = discoveryResult.diagnostics.totalJobsDiscovered || jobs.length;
+        await this.updateProgress(crawl.id, connector, "Parsing", {
+          jobsDiscovered: discovered,
+          jobsImported: imported,
+          duplicates,
+          failures,
+        });
         for (const job of jobs) {
+          if (await this.isCancelled()) {
+            cancelled = true;
+            break;
+          }
           try {
             await wait(delayFor(connector, robots.crawlDelay));
             const result = await this.discovery.evaluateAndImport(
               this.providerId,
               job,
               context,
+              (stage) => this.updateStage(crawl.id, connector, stage),
             );
             if (result.duplicate) duplicates += 1;
             else imported += 1;
@@ -232,8 +308,33 @@ export class ProviderDiscoveryRunner {
             failures += 1;
             lastError = typed.providerMessage;
           }
+          await this.updateProgress(crawl.id, connector, "Matching", {
+            jobsDiscovered: discovered,
+            jobsImported: imported,
+            duplicates,
+            failures,
+          });
         }
-        if (discoveryResult.feed.complete) {
+        if (cancelled) {
+          await this.finish(connector, crawl.id, startedAt, {
+            status: "Cancelled",
+            jobsDiscovered: discovered,
+            jobsImported: imported,
+            duplicates,
+            failures,
+            lastError: null,
+            health: connector.health === "Error" ? "Error" : "Healthy",
+            robotsPolicy: robots.policy,
+            diagnostics: discoveryResult.diagnostics,
+          });
+          summary.jobsDiscovered += discovered;
+          summary.jobsImported += imported;
+          summary.duplicates += duplicates;
+          summary.failures += failures;
+          continue;
+        }
+        if (discoveryResult.feed.complete && failures === 0) {
+          await this.updateStage(crawl.id, connector, "Reconciling");
           await reconcileCompleteFeed(this.database, {
             sourceName: this.registry.get(this.providerId).name,
             companyName: connector.company,
@@ -380,5 +481,61 @@ export class ProviderDiscoveryRunner {
         },
       }),
     ]);
+  }
+
+  private async updateStage(
+    crawlId: string,
+    connector: CompanyConnector,
+    stage: "Connecting" | "Downloading" | "Parsing" | "Normalizing" | "Matching" | "Reconciling",
+  ) {
+    await this.database.connectorCrawl.update({
+      where: { id: crawlId },
+      data: {
+        metadata: {
+          event: "crawl_progress",
+          provider: this.providerId,
+          company: connector.company,
+          trigger: this.options.trigger ?? "manual",
+          currentStage: stage,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+  }
+
+  private async updateProgress(
+    crawlId: string,
+    connector: CompanyConnector,
+    stage: "Parsing" | "Matching",
+    progress: {
+      jobsDiscovered: number;
+      jobsImported: number;
+      duplicates: number;
+      failures: number;
+    },
+  ) {
+    await this.database.connectorCrawl.update({
+      where: { id: crawlId },
+      data: {
+        ...progress,
+        metadata: {
+          event: "crawl_progress",
+          provider: this.providerId,
+          company: connector.company,
+          trigger: this.options.trigger ?? "manual",
+          currentStage: stage,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+  }
+
+  private async isCancelled() {
+    if (!this.options.batchId) return false;
+    const batch = await this.database.discoveryBatch.findUnique({
+      where: { id: this.options.batchId },
+      select: { cancelRequested: true },
+    });
+    return batch?.cancelRequested ?? false;
   }
 }

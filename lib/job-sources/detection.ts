@@ -72,6 +72,24 @@ const PROVIDERS: Array<{
     },
   },
   {
+    id: "teamtailor",
+    name: "Teamtailor",
+    detect: (url) => {
+      const suffix = ".teamtailor.com";
+      if (!url.hostname.endsWith(suffix)) return null;
+      const tenant = url.hostname.slice(0, -suffix.length);
+      return tenant && !["api", "api.na", "www"].includes(tenant) ? tenant : null;
+    },
+  },
+  {
+    id: "jobvite",
+    name: "Jobvite",
+    detect: (url) =>
+      url.hostname === "jobs.jobvite.com"
+        ? url.pathname.split("/").filter(Boolean)[0] ?? null
+        : null,
+  },
+  {
     id: "personio",
     name: "Personio",
     detect: (url) => {

@@ -9,6 +9,8 @@ import { RecruiteeProvider } from "./providers/recruitee";
 import { ComeetProvider } from "./providers/comeet";
 import { PersonioProvider } from "./providers/personio";
 import { JobScoreProvider } from "./providers/jobscore";
+import { TeamtailorProvider } from "./providers/teamtailor";
+import { JobviteProvider } from "./providers/jobvite";
 
 export class JobSourceRegistry {
   private readonly providers = new Map<string, JobSourceProvider>();
@@ -45,6 +47,8 @@ export function createJobSourceRegistry() {
     .register(new ComeetProvider())
     .register(new PersonioProvider())
     .register(new JobScoreProvider())
+    .register(new TeamtailorProvider())
+    .register(new JobviteProvider())
     .register(new WorkdayProvider());
 }
 

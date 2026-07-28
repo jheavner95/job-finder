@@ -29,6 +29,7 @@ export type JobSearchCriteria = {
 };
 
 export type ProviderContext = {
+  connectorId?: string;
   company: string;
   careerUrl: string;
   connectorKey: string;
@@ -36,6 +37,10 @@ export type ProviderContext = {
   robotsPolicy?: string | null;
   crawlDelay?: number | null;
   rateLimit?: number | null;
+  credentialRegion?: string | null;
+  feedOrigin?: string | null;
+  feedPath?: string | null;
+  feedVersion?: string | null;
 };
 
 export const PERSONIO_LOCALES = ["de", "en", "fr", "es", "nl", "it", "pt"] as const;
@@ -79,6 +84,7 @@ export type DiscoveredJob = {
   company: string;
   location?: string;
   canonicalUrl: string;
+  providerPayload?: unknown;
   discoveredVia?: "canonical" | "linkedin" | "indeed" | "google-jobs" | "ziprecruiter";
 };
 
