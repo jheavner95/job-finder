@@ -1,27 +1,14 @@
-import { copyFileSync, unlinkSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
-import { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { getScanSnapshot } from "../lib/scan-presentation";
+import { createTestDatabase, releaseTestDatabases } from "./test-database";
 
-const databases: Array<{ client: PrismaClient; path: string }> = [];
+const testDatabase = () => createTestDatabase({ label: "scan" });
 
-function testDatabase() {
-  const path = `/tmp/job-search-intelligence-scan-${randomUUID()}.db`;
-  copyFileSync("prisma/dev.db", path);
-  const client = new PrismaClient({ datasourceUrl: `file:${path}` });
-  databases.push({ client, path });
-  return client;
-}
-
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map(async ({ client, path }) => {
-    await client.$disconnect();
-    unlinkSync(path);
-  }));
-});
+afterEach(releaseTestDatabases);
 
 async function connector(database: PrismaClient, label: string) {
   const suffix = randomUUID();
@@ -37,14 +24,31 @@ async function connector(database: PrismaClient, label: string) {
   });
 }
 
+async function opportunity(database: PrismaClient, firstSeenAt: Date) {
+  const suffix = randomUUID();
+  return database.job.create({
+    data: {
+      fingerprint: `scan-${suffix}`,
+      sourceJobId: suffix,
+      title: `Staff Product Designer ${suffix}`,
+      sourceUrl: `https://boards.greenhouse.io/jobs/${suffix}`,
+      originalSourceText: "Lead product strategy and design systems.",
+      isSynthetic: false,
+      firstSeenAt,
+      company: { create: { name: `Scan company ${suffix}` } },
+      source: { create: { name: `Scan source ${suffix}` } },
+    },
+  });
+}
+
 describe("decision-oriented scan presentation", () => {
   it("represents an idle or never-scanned selection as no snapshot", async () => {
-    const database = testDatabase();
+    const database = await testDatabase();
     await expect(getScanSnapshot(database, "missing-batch")).resolves.toBeNull();
   });
 
   it("shows real queued, running, and completed provider units", async () => {
-    const database = testDatabase();
+    const database = await testDatabase();
     const [complete, active, waiting] = await Promise.all([
       connector(database, "Complete"),
       connector(database, "Active"),
@@ -91,7 +95,7 @@ describe("decision-oriented scan presentation", () => {
   });
 
   it("reconciles persisted terminal dispositions in the scan snapshot", async () => {
-    const database = testDatabase();
+    const database = await testDatabase();
     const source = await connector(database, "Accounting");
     const batch = await database.discoveryBatch.create({
       data: {
@@ -150,7 +154,7 @@ describe("decision-oriented scan presentation", () => {
     ["Cancelled", "Healthy"],
     ["Failed", "Error"],
   ])("presents %s batches with provider state %s", async (status, providerState) => {
-    const database = testDatabase();
+    const database = await testDatabase();
     const source = await connector(database, status);
     const batch = await database.discoveryBatch.create({
       data: {
@@ -193,17 +197,11 @@ describe("decision-oriented scan presentation", () => {
   });
 
   it("highlights opportunities first seen during a completed scan", async () => {
-    const database = testDatabase();
+    const database = await testDatabase();
     const source = await connector(database, "New opportunity");
     const startedAt = new Date();
     const completedAt = new Date(startedAt.getTime() + 4_100);
-    const job = await database.job.findFirstOrThrow({
-      where: { isSynthetic: false },
-    });
-    await database.job.update({
-      where: { id: job.id },
-      data: { firstSeenAt: new Date(startedAt.getTime() + 1_000) },
-    });
+    const job = await opportunity(database, new Date(startedAt.getTime() + 1_000));
     const batch = await database.discoveryBatch.create({
       data: {
         trigger: "manual",

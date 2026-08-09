@@ -1,7 +1,5 @@
-import { copyFileSync, unlinkSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
-import { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DiscoveryService } from "../lib/job-sources/services/discovery-service";
@@ -22,15 +20,9 @@ import {
   jobScoreMultipleJobs,
   jobScoreSingleJob,
 } from "./fixtures/jobscore";
+import { createTestDatabase, releaseTestDatabases } from "./test-database";
 
-const databases: Array<{ client: PrismaClient; path: string }> = [];
-
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map(async ({ client, path }) => {
-    await client.$disconnect();
-    unlinkSync(path);
-  }));
-});
+afterEach(releaseTestDatabases);
 
 const context: ProviderContext = {
   company: "Example Products",
@@ -47,13 +39,7 @@ function jsonResponse(payload: unknown, status = 200, headers?: HeadersInit) {
   ));
 }
 
-function isolatedDatabase() {
-  const path = `/tmp/job-search-intelligence-jobscore-${randomUUID()}.db`;
-  copyFileSync("prisma/dev.db", path);
-  const client = new PrismaClient({ datasourceUrl: `file:${path}` });
-  databases.push({ client, path });
-  return client;
-}
+const isolatedDatabase = () => createTestDatabase({ label: "jobscore" });
 
 describe("JobScore public connector", () => {
   it("parses a single job and documented feed fields", () => {
@@ -71,12 +57,17 @@ describe("JobScore public connector", () => {
   it("discovers multiple jobs and reports deterministic diagnostics", async () => {
     const provider = new JobScoreProvider(vi.fn(() => jsonResponse(jobScoreMultipleJobs)));
     const result = await provider.discoverDetailed({ titles: [], locations: [] }, context);
-    expect(result.jobs.map((job) => job.externalId)).toEqual(["JS-101", "JS-102"]);
+    // Both records are parsed; the UX Researcher is retained in the ledger but
+    // screened out by the shared product design relevance test.
+    expect(result.jobs.map((job) => job.externalId)).toEqual(["JS-101"]);
     expect(result.diagnostics).toMatchObject({
       totalJobsDiscovered: 2,
-      titleMatches: 2,
-      locationMatches: 2,
+      titleMatches: 1,
+      locationMatches: 1,
+      excludedByTitle: 1,
     });
+    expect(result.diagnostics.excludedJobs.map((job) => [job.externalId, job.reason]))
+      .toEqual([["JS-102", "title"]]);
   });
 
   it("normalizes canonical and application URLs, dates, department, and identity", async () => {
@@ -176,7 +167,7 @@ describe("JobScore public connector", () => {
   });
 
   it("fails closed on per-employer robots denial", async () => {
-    const database = isolatedDatabase();
+    const database = await isolatedDatabase();
     const company = `JobScore Robots ${randomUUID()}`;
     const connector = await database.companyConnector.create({
       data: {
@@ -208,7 +199,7 @@ describe("JobScore public connector", () => {
   });
 
   it("enforces the one-hour polling floor without issuing a request", async () => {
-    const database = isolatedDatabase();
+    const database = await isolatedDatabase();
     const company = `JobScore Polling ${randomUUID()}`;
     const connector = await database.companyConnector.create({
       data: {
@@ -241,7 +232,7 @@ describe("JobScore public connector", () => {
   });
 
   it("persists source identity and prevents repeat imports", async () => {
-    const database = isolatedDatabase();
+    const database = await isolatedDatabase();
     const identityContext = {
       ...context,
       company: `JobScore Identity ${randomUUID()}`,

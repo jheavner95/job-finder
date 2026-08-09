@@ -1,0 +1,725 @@
+{
+  "name": "AI Product Experience Benchmark",
+  "capturedAt": "2026-08-09",
+  "description": "Externally curated set of currently-open roles where product/UX/interaction/conversation design meaningfully intersects with AI products. Built independently of Job Finder's own relevance screen so it can measure that screen's blind spots. Qualification came from the posting body, not the title alone; roles that were ordinary design jobs at AI companies were rejected and the reason recorded.",
+  "methodology": {
+    "employersProbed": 110,
+    "boardsResolved": 74,
+    "postingsScanned": 8887,
+    "designTitledRoles": 138,
+    "qualifying": 27,
+    "rejectedAfterReview": 6,
+    "qualificationRule": "Explicit AI domain in the title, OR >=2 substantive human-AI experience responsibilities in the posting body; then hand-screened to exclude company-blurb-only and AI-as-designer-tool roles."
+  },
+  "rejectedExamples": [
+    {
+      "role": "harvey::staff product designer",
+      "reason": "AI appears only in the company blurb; role responsibilities are generic product design."
+    },
+    {
+      "role": "abridge::senior product designer",
+      "reason": "AI is company/product context; role section asks for generic product design, 'bonus points for AI experience'."
+    },
+    {
+      "role": "abridge::staff product designer",
+      "reason": "AI is company/product context; role section asks for generic product design, 'bonus points for AI experience'."
+    },
+    {
+      "role": "vercel::senior product designer, growth",
+      "reason": "AI signals are the company tagline plus LLM tool access as a perk, not a design responsibility."
+    },
+    {
+      "role": "decagon::brand designer",
+      "reason": "Brand/social craft, outside product-design disciplines; AI is company context only."
+    },
+    {
+      "role": "1password::product designer",
+      "reason": "AI referenced as a tool the designer uses (Figma Make, Cursor), not as the product experience being designed."
+    }
+  ],
+  "itemCount": 27,
+  "employerCount": 19,
+  "items": [
+    {
+      "employer": "openai",
+      "title": "Model Designer",
+      "location": "San Francisco",
+      "workMode": "Onsite/Unstated",
+      "provider": "ashby",
+      "url": "https://jobs.ashbyhq.com/openai/91e1c582-cceb-4e98-bc5a-caf2def45a0d",
+      "boardToken": "openai",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Mid",
+      "aiTerms": [
+        "model",
+        "human-ai"
+      ],
+      "designTerms": [
+        "model designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "human-AI interaction",
+        "AI experience",
+        "model feedback/trust"
+      ]
+    },
+    {
+      "employer": "elevenlabs",
+      "title": "Product Designer",
+      "location": "London",
+      "workMode": "Onsite/Unstated",
+      "provider": "ashby",
+      "url": "https://jobs.ashbyhq.com/elevenlabs/89da00ec-11b0-4359-913b-c3a89c1013bc",
+      "boardToken": "elevenlabs",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Mid",
+      "aiTerms": [
+        "model",
+        "generative ai",
+        "ai-first",
+        "conversational ai"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "posting-body-evidence",
+      "evidenceSignals": [
+        "generative AI",
+        "conversation design"
+      ]
+    },
+    {
+      "employer": "synthesia",
+      "title": "Product Designer, AI-Native Products (Senior/Staff-Level)",
+      "location": "Europe",
+      "workMode": "Onsite/Unstated",
+      "provider": "ashby",
+      "url": "https://jobs.ashbyhq.com/synthesia/4721d2c3-3d94-45d3-b9f7-ea5e1f549ce2",
+      "boardToken": "synthesia",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Staff",
+      "aiTerms": [
+        "ai-native",
+        "agentic",
+        "model"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "agentic",
+        "conversation design",
+        "AI-native product"
+      ]
+    },
+    {
+      "employer": "intercom",
+      "title": "Senior Product Designer",
+      "location": "Dublin, Ireland",
+      "workMode": "Onsite/Unstated",
+      "provider": "greenhouse",
+      "url": "https://job-boards.greenhouse.io/intercom/jobs/7862050",
+      "boardToken": "intercom",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Senior",
+      "aiTerms": [
+        "ai agent",
+        "ai-powered"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "posting-body-evidence",
+      "evidenceSignals": [
+        "AI agents",
+        "AI experience",
+        "chat experience"
+      ]
+    },
+    {
+      "employer": "intercom",
+      "title": "Staff AI Designer",
+      "location": "Dublin, Ireland",
+      "workMode": "Onsite/Unstated",
+      "provider": "greenhouse",
+      "url": "https://job-boards.greenhouse.io/intercom/jobs/7917235",
+      "boardToken": "intercom",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Staff",
+      "aiTerms": [
+        "ai agent",
+        "model",
+        "agentic",
+        "llms"
+      ],
+      "designTerms": [],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "agentic",
+        "AI agents",
+        "LLM",
+        "AI-native product",
+        "designing for AI"
+      ]
+    },
+    {
+      "employer": "intercom",
+      "title": "Staff/Principal Product Designer",
+      "location": "London, England",
+      "workMode": "Onsite/Unstated",
+      "provider": "greenhouse",
+      "url": "https://job-boards.greenhouse.io/intercom/jobs/7862042",
+      "boardToken": "intercom",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Principal",
+      "aiTerms": [
+        "ai agent",
+        "ai-powered"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "posting-body-evidence",
+      "evidenceSignals": [
+        "AI agents",
+        "AI experience",
+        "chat experience"
+      ]
+    },
+    {
+      "employer": "databricks",
+      "title": "Sr. Product Designer, AI/BI",
+      "location": "Mountain View, California; San Francisco, California; Seattle, Washington",
+      "workMode": "Onsite/Unstated",
+      "provider": "greenhouse",
+      "url": "https://databricks.com/company/careers/open-positions/job?gh_jid=8429978002",
+      "boardToken": "databricks",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Senior",
+      "aiTerms": [
+        "generative ai",
+        "ai-native"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "generative AI"
+      ]
+    },
+    {
+      "employer": "databricks",
+      "title": "Staff Product Designer, AI Products",
+      "location": "New York City, New York",
+      "workMode": "Onsite/Unstated",
+      "provider": "greenhouse",
+      "url": "https://databricks.com/company/careers/open-positions/job?gh_jid=8584704002",
+      "boardToken": "databricks",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Staff",
+      "aiTerms": [],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "AI-native product"
+      ]
+    },
+    {
+      "employer": "figma",
+      "title": "Product Designer, AI Models",
+      "location": "San Francisco, CA • New York, NY • United States",
+      "workMode": "Onsite/Unstated",
+      "provider": "greenhouse",
+      "url": "https://boards.greenhouse.io/figma/jobs/5711913004?gh_jid=5711913004",
+      "boardToken": "figma",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Mid",
+      "aiTerms": [
+        "model"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": []
+    },
+    {
+      "employer": "figma",
+      "title": "Product Designer, Design, Dev, & AI Tools",
+      "location": "San Francisco, CA • New York, NY • United States",
+      "workMode": "Onsite/Unstated",
+      "provider": "greenhouse",
+      "url": "https://boards.greenhouse.io/figma/jobs/5711468004?gh_jid=5711468004",
+      "boardToken": "figma",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Mid",
+      "aiTerms": [],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": []
+    },
+    {
+      "employer": "dropbox",
+      "title": "Principal Product Designer",
+      "location": "Remote - Canada: Select locations",
+      "workMode": "Remote",
+      "provider": "greenhouse",
+      "url": "https://jobs.dropbox.com/listing/8003390?gh_jid=8003390",
+      "boardToken": "dropbox",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Principal",
+      "aiTerms": [
+        "ai-first",
+        "ai-powered",
+        "agentic"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "posting-body-evidence",
+      "evidenceSignals": [
+        "agentic",
+        "AI-native product",
+        "AI experience",
+        "designing for AI"
+      ]
+    },
+    {
+      "employer": "brex",
+      "title": "Staff Product Designer, AI",
+      "location": "San Francisco, California, United States",
+      "workMode": "Onsite/Unstated",
+      "provider": "greenhouse",
+      "url": "https://www.brex.com/careers/8616214002?gh_jid=8616214002",
+      "boardToken": "brex",
+      "observedAt": "2026-08-09",
+      "salary": "$240,000 - $300,000",
+      "seniority": "Staff",
+      "aiTerms": [
+        "ai-native",
+        "agentic"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "agentic",
+        "AI experience",
+        "designing for AI"
+      ]
+    },
+    {
+      "employer": "vanta",
+      "title": "Head of Design",
+      "location": "Remote U.S.",
+      "workMode": "Remote",
+      "provider": "ashby",
+      "url": "https://jobs.ashbyhq.com/vanta/19837d21-971e-4b9d-b078-320895fae28a",
+      "boardToken": "vanta",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Leadership",
+      "aiTerms": [
+        "ai-native",
+        "agentic",
+        "ai-first"
+      ],
+      "designTerms": [
+        "head of design"
+      ],
+      "qualifiedBy": "posting-body-evidence",
+      "evidenceSignals": [
+        "agentic",
+        "AI-native product"
+      ]
+    },
+    {
+      "employer": "vanta",
+      "title": "Staff Product Designer, Design Systems",
+      "location": "Remote U.S.",
+      "workMode": "Remote",
+      "provider": "ashby",
+      "url": "https://jobs.ashbyhq.com/vanta/0fcbc935-76c7-4eac-b522-af421ed200c9",
+      "boardToken": "vanta",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Staff",
+      "aiTerms": [
+        "agentic",
+        "model",
+        "ai-native"
+      ],
+      "designTerms": [
+        "product designer",
+        "design systems"
+      ],
+      "qualifiedBy": "posting-body-evidence",
+      "evidenceSignals": [
+        "agentic",
+        "AI-native product"
+      ]
+    },
+    {
+      "employer": "gitlab",
+      "title": "Senior Product Designer, AI",
+      "location": "Remote, Canada; Remote, US",
+      "workMode": "Remote",
+      "provider": "greenhouse",
+      "url": "https://job-boards.greenhouse.io/gitlab/jobs/8464608002",
+      "boardToken": "gitlab",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Senior",
+      "aiTerms": [
+        "ai-powered",
+        "ai agents",
+        "agentic"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "agentic",
+        "AI agents",
+        "AI-native product",
+        "AI experience",
+        "designing for AI",
+        "chat experience"
+      ]
+    },
+    {
+      "employer": "instacart",
+      "title": "Staff Experience Designer",
+      "location": "Canada - Remote (ON, AB, BC, or NS Only)",
+      "workMode": "Remote",
+      "provider": "greenhouse",
+      "url": "https://instacart.careers/job/?gh_jid=8084090",
+      "boardToken": "instacart",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Staff",
+      "aiTerms": [
+        "agentic"
+      ],
+      "designTerms": [
+        "experience designer"
+      ],
+      "qualifiedBy": "posting-body-evidence",
+      "evidenceSignals": [
+        "agentic",
+        "conversation design"
+      ]
+    },
+    {
+      "employer": "coinbase",
+      "title": "Staff Product Designer (Experience & Engagement)",
+      "location": "Remote - USA",
+      "workMode": "Remote",
+      "provider": "greenhouse",
+      "url": "https://www.coinbase.com/careers/positions/8014564?gh_jid=8014564",
+      "boardToken": "coinbase",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Staff",
+      "aiTerms": [
+        "ai-first",
+        "chatbot",
+        "voicebot",
+        "ai-powered",
+        "generative ai"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "posting-body-evidence",
+      "evidenceSignals": [
+        "generative AI",
+        "conversation design",
+        "AI-native product"
+      ]
+    },
+    {
+      "employer": "spotify",
+      "title": "Senior Conversation Designer - Experience Content Design",
+      "location": "London",
+      "workMode": "Onsite/Unstated",
+      "provider": "lever",
+      "url": "https://jobs.lever.co/spotify/7ce8eee9-9371-43dd-b2fd-5759062938f6",
+      "boardToken": "spotify",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Senior",
+      "aiTerms": [],
+      "designTerms": [
+        "conversation designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "conversation design",
+        "AI-native product"
+      ]
+    },
+    {
+      "employer": "sierra",
+      "title": "Product Designer",
+      "location": "San Francisco, CA",
+      "workMode": "Onsite/Unstated",
+      "provider": "ashby",
+      "url": "https://jobs.ashbyhq.com/sierra/ba780c1d-ebd7-45b8-8c99-12666af5bfa3",
+      "boardToken": "sierra",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Mid",
+      "aiTerms": [
+        "ai agents",
+        "model"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "posting-body-evidence",
+      "evidenceSignals": [
+        "AI agents",
+        "conversation design",
+        "AI-native product",
+        "designing for AI"
+      ]
+    },
+    {
+      "employer": "sierra",
+      "title": "Agent Experience Designer, Voice (Multilingual)",
+      "location": "San Francisco, CA",
+      "workMode": "Onsite/Unstated",
+      "provider": "ashby",
+      "url": "https://jobs.ashbyhq.com/sierra/1a0e307f-7f02-4971-820c-a244ad909617",
+      "boardToken": "sierra",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Mid",
+      "aiTerms": [
+        "ai agents",
+        "conversation design",
+        "model"
+      ],
+      "designTerms": [
+        "experience designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "AI agents",
+        "agent experience",
+        "conversation design",
+        "AI experience"
+      ]
+    },
+    {
+      "employer": "sierra",
+      "title": "AI Voice Designer",
+      "location": "London",
+      "workMode": "Onsite/Unstated",
+      "provider": "ashby",
+      "url": "https://jobs.ashbyhq.com/sierra/5ea8d56f-09b5-4113-9929-a3ef42d010ef",
+      "boardToken": "sierra",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Mid",
+      "aiTerms": [
+        "ai agents",
+        "conversational ai",
+        "model"
+      ],
+      "designTerms": [
+        "voice designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "AI agents",
+        "conversation design"
+      ]
+    },
+    {
+      "employer": "decagon",
+      "title": "Conversation Designer",
+      "location": "Remote",
+      "workMode": "Remote",
+      "provider": "ashby",
+      "url": "https://jobs.ashbyhq.com/decagon/ad6db669-0ff9-41c6-b86b-8e567ad7fbbd",
+      "boardToken": "decagon",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Mid",
+      "aiTerms": [
+        "conversational ai",
+        "ai agents",
+        "llms",
+        "conversation design",
+        "llm"
+      ],
+      "designTerms": [
+        "conversation designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "AI agents",
+        "conversation design",
+        "LLM"
+      ]
+    },
+    {
+      "employer": "cresta",
+      "title": "Conversational Designer",
+      "location": "United Kingdom (Remote)",
+      "workMode": "Remote",
+      "provider": "greenhouse",
+      "url": "https://job-boards.greenhouse.io/cresta/jobs/5217865008",
+      "boardToken": "cresta",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Mid",
+      "aiTerms": [
+        "conversational ai",
+        "conversation design",
+        "model",
+        "prompt"
+      ],
+      "designTerms": [
+        "conversational designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "AI agents",
+        "conversation design",
+        "chat experience"
+      ]
+    },
+    {
+      "employer": "cresta",
+      "title": "Senior Product Designer, Core Platform",
+      "location": "Berlin, Germany (Hybird) ",
+      "workMode": "Onsite/Unstated",
+      "provider": "greenhouse",
+      "url": "https://job-boards.greenhouse.io/cresta/jobs/5173707008",
+      "boardToken": "cresta",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Senior",
+      "aiTerms": [
+        "conversational ai",
+        "ai agent",
+        "agentic",
+        "ai-native"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "posting-body-evidence",
+      "evidenceSignals": [
+        "agentic",
+        "AI agents",
+        "conversation design"
+      ]
+    },
+    {
+      "employer": "sigmacomputing",
+      "title": "Senior Product Designer, AI",
+      "location": "San Francisco, CA",
+      "workMode": "Onsite/Unstated",
+      "provider": "greenhouse",
+      "url": "https://job-boards.greenhouse.io/sigmacomputing/jobs/7767897003",
+      "boardToken": "sigmacomputing",
+      "observedAt": "2026-08-09",
+      "salary": "$210,000 - $250,000",
+      "seniority": "Senior",
+      "aiTerms": [
+        "llms",
+        "model",
+        "ai-native",
+        "prompt",
+        "ai-powered",
+        "agentic"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "agentic",
+        "conversation design",
+        "LLM",
+        "AI experience",
+        "model feedback/trust"
+      ]
+    },
+    {
+      "employer": "okta",
+      "title": "Staff Product Designer — AX & Growth (DLG)",
+      "location": "Bengaluru, India",
+      "workMode": "Onsite/Unstated",
+      "provider": "greenhouse",
+      "url": "https://www.okta.com/company/careers/opportunity/6923203?gh_jid=6923203",
+      "boardToken": "okta",
+      "observedAt": "2026-08-09",
+      "salary": null,
+      "seniority": "Staff",
+      "aiTerms": [
+        "ai agents",
+        "agentic",
+        "ai-powered"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "posting-body-evidence",
+      "evidenceSignals": [
+        "agentic",
+        "AI agents",
+        "agent experience",
+        "designing for AI"
+      ]
+    },
+    {
+      "employer": "affirm",
+      "title": "Staff Product Designer, Agentic Experiences",
+      "location": "Remote US",
+      "workMode": "Remote",
+      "provider": "greenhouse",
+      "url": "https://job-boards.greenhouse.io/affirm/jobs/7799295003",
+      "boardToken": "affirm",
+      "observedAt": "2026-08-09",
+      "salary": "$195,000 - $255,000",
+      "seniority": "Staff",
+      "aiTerms": [
+        "agentic"
+      ],
+      "designTerms": [
+        "product designer"
+      ],
+      "qualifiedBy": "ai-domain-in-title",
+      "evidenceSignals": [
+        "agentic",
+        "AI experience",
+        "designing for AI"
+      ]
+    }
+  ]
+}

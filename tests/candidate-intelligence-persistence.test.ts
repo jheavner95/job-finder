@@ -1,32 +1,49 @@
-import { copyFileSync, unlinkSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
-import { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   deserializeOpportunityIntelligence,
 } from "../lib/candidate-intelligence/service";
 import { completeCandidateEvidence } from "../lib/candidate-intelligence/evidence-completion";
+import { createTestDatabase, releaseTestDatabases } from "./test-database";
 
-const databases: Array<{ client: PrismaClient; path: string }> = [];
-
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map(async ({ client, path }) => {
-    await client.$disconnect();
-    unlinkSync(path);
-  }));
-});
+afterEach(releaseTestDatabases);
 
 describe("candidate intelligence persistence", () => {
   it("structures Markdown evidence and persists explainable guidance for every imported job", async () => {
-    const path = `/tmp/job-search-intelligence-ci-${randomUUID()}.db`;
-    copyFileSync("prisma/dev.db", path);
-    const database = new PrismaClient({ datasourceUrl: `file:${path}` });
-    databases.push({ client: database, path });
+    const database = await createTestDatabase({ label: "candidate-intelligence" });
+
+    // Explicit imported opportunities, so "every imported job" is exercised
+    // rather than vacuously satisfied by an empty opportunity set.
+    const suffix = randomUUID();
+    const source = await database.jobSource.create({
+      data: { name: `Evidence source ${suffix}` },
+    });
+    const company = await database.company.create({
+      data: { name: `Evidence company ${suffix}` },
+    });
+    await Promise.all([
+      "Staff Product Designer",
+      "Principal Product Designer",
+    ].map((title, index) => database.job.create({
+      data: {
+        fingerprint: `evidence-${suffix}-${index}`,
+        sourceJobId: `evidence-${index}`,
+        title,
+        location: "Remote — United States",
+        sourceUrl: `https://example.test/${suffix}/${index}`,
+        originalSourceText:
+          "Lead enterprise design systems, research operations, and accessibility work.",
+        isSynthetic: false,
+        companyId: company.id,
+        sourceId: source.id,
+      },
+    })));
 
     const result = await completeCandidateEvidence(database);
     const imported = await database.job.count({ where: { isSynthetic: false } });
+    expect(imported).toBe(2);
     expect(result.resumeRecords).toBeGreaterThanOrEqual(0);
     expect(result.portfolioProjects).toBeGreaterThanOrEqual(0);
     expect(result.capabilityLinks.resume).toBeGreaterThanOrEqual(0);

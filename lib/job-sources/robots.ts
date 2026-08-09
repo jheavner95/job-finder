@@ -1,4 +1,5 @@
 import { ProviderError } from "./errors";
+import type { RobotsUnavailablePolicy } from "./capabilities";
 
 export type RobotsDecision = {
   allowed: boolean;
@@ -89,6 +90,7 @@ export async function checkRobots(
   robotsUrl: string,
   path: string,
   client: typeof fetch = fetch,
+  unavailablePolicy: RobotsUnavailablePolicy = "fail-closed",
 ): Promise<RobotsDecision> {
   const response = await client(robotsUrl, {
     headers: { "User-Agent": "job-search-intelligence/1.0" },
@@ -100,6 +102,21 @@ export async function checkRobots(
       policy: "not-published",
       crawlDelay: null,
       reason: "No robots.txt policy was published by the API host.",
+    };
+  }
+  // RFC 9309 §2.3.1.3: 400-499 means the policy is "Unavailable" and a crawler
+  // MAY proceed. Only providers that declare the policy get this reading; every
+  // other provider keeps failing closed on the same status.
+  if (
+    unavailablePolicy === "rfc9309-unavailable"
+    && response.status >= 400
+    && response.status <= 499
+  ) {
+    return {
+      allowed: true,
+      policy: "unavailable-4xx",
+      crawlDelay: null,
+      reason: `robots.txt returned HTTP ${response.status}; treated as unavailable under RFC 9309 §2.3.1.3. Request limited to the provider's documented public API.`,
     };
   }
   if (!response.ok) {

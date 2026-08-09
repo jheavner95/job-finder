@@ -1,7 +1,5 @@
-import { copyFileSync, readFileSync, unlinkSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 
-import { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -13,14 +11,10 @@ import {
 } from "../lib/candidate-intelligence/portfolio-projects";
 import { syncCandidateProfile } from "../lib/candidate-intelligence/profile-sync";
 import { getOnboardingState } from "../lib/onboarding";
-
-const databases: Array<{ client: PrismaClient; path: string }> = [];
+import { createTestDatabase, releaseTestDatabases } from "./test-database";
 
 async function isolatedDatabase() {
-  const path = `/tmp/job-finder-portfolio-${randomUUID()}.db`;
-  copyFileSync("prisma/dev.db", path);
-  const database = new PrismaClient({ datasourceUrl: `file:${path}` });
-  databases.push({ client: database, path });
+  const database = await createTestDatabase({ label: "portfolio" });
   await database.candidateProjectProgress.deleteMany({
     where: { profileId: "primary-candidate" },
   });
@@ -30,12 +24,7 @@ async function isolatedDatabase() {
   return database;
 }
 
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map(async ({ client, path }) => {
-    await client.$disconnect();
-    unlinkSync(path);
-  }));
-});
+afterEach(releaseTestDatabases);
 
 describe("portfolio project management", () => {
   it("archives, excludes, restores, and permanently removes one project safely", async () => {

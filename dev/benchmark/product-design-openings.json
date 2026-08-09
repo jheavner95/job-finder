@@ -1,0 +1,448 @@
+{
+  "capturedAt": "2026-08-08",
+  "description": "Externally curated set of real, currently-open product-design roles used to measure Job Finder discovery recall. The employer set was selected by hand across the candidate target industries and is deliberately NOT produced by the discovery pipeline under test.",
+  "employerCount": 28,
+  "itemCount": 55,
+  "items": [
+    {
+      "company": "Asana",
+      "provider": "greenhouse",
+      "boardToken": "asana",
+      "title": "Product Designer",
+      "location": "San Francisco",
+      "url": "https://www.asana.com/jobs/apply/7952123?gh_jid=7952123"
+    },
+    {
+      "company": "Asana",
+      "provider": "greenhouse",
+      "boardToken": "asana",
+      "title": "Product Designer, Adapt",
+      "location": "Warsaw",
+      "url": "https://www.asana.com/jobs/apply/8022122?gh_jid=8022122"
+    },
+    {
+      "company": "Asana",
+      "provider": "greenhouse",
+      "boardToken": "asana",
+      "title": "Product Designer, Coordinate",
+      "location": "Warsaw",
+      "url": "https://www.asana.com/jobs/apply/7587002?gh_jid=7587002"
+    },
+    {
+      "company": "Airtable",
+      "provider": "greenhouse",
+      "boardToken": "airtable",
+      "title": "Product Designer (8+ YOE)",
+      "location": "San Francisco, CA",
+      "url": "https://job-boards.greenhouse.io/airtable/jobs/8400776002"
+    },
+    {
+      "company": "Notion",
+      "provider": "ashby",
+      "boardToken": "notion",
+      "title": "Product Designer",
+      "location": "San Francisco, California",
+      "url": "https://jobs.ashbyhq.com/notion/d177d052-ef57-4900-acf2-d58e9eded620"
+    },
+    {
+      "company": "Linear",
+      "provider": "ashby",
+      "boardToken": "linear",
+      "title": "Senior / Staff Product Designer",
+      "location": "North America",
+      "url": "https://jobs.ashbyhq.com/linear/a264869e-f058-487c-ab7f-9b77dffa427c"
+    },
+    {
+      "company": "Linear",
+      "provider": "ashby",
+      "boardToken": "linear",
+      "title": "Principal Product Designer",
+      "location": "Europe",
+      "url": "https://jobs.ashbyhq.com/linear/ba8a41d2-4198-481a-a7f4-e09c5364ff7f"
+    },
+    {
+      "company": "Linear",
+      "provider": "ashby",
+      "boardToken": "linear",
+      "title": "Mobile Product Designer",
+      "location": "North America",
+      "url": "https://jobs.ashbyhq.com/linear/eac7f181-d658-4943-9430-51bae2bcd110"
+    },
+    {
+      "company": "Amplitude",
+      "provider": "greenhouse",
+      "boardToken": "amplitude",
+      "title": "Head of Product Design",
+      "location": "San Francisco, CA",
+      "url": "https://job-boards.greenhouse.io/amplitude/jobs/8622704002"
+    },
+    {
+      "company": "Brex",
+      "provider": "greenhouse",
+      "boardToken": "brex",
+      "title": "Staff Product Designer",
+      "location": "New York, New York, United States",
+      "url": "https://www.brex.com/careers/8124973002?gh_jid=8124973002"
+    },
+    {
+      "company": "Brex",
+      "provider": "greenhouse",
+      "boardToken": "brex",
+      "title": "Staff Product Designer, AI",
+      "location": "San Francisco, California, United States",
+      "url": "https://www.brex.com/careers/8616214002?gh_jid=8616214002"
+    },
+    {
+      "company": "Affirm",
+      "provider": "greenhouse",
+      "boardToken": "affirm",
+      "title": "Staff Product Designer",
+      "location": "Remote US",
+      "url": "https://job-boards.greenhouse.io/affirm/jobs/7605936003"
+    },
+    {
+      "company": "Affirm",
+      "provider": "greenhouse",
+      "boardToken": "affirm",
+      "title": "Staff Product Designer, Agentic Experiences",
+      "location": "Remote US",
+      "url": "https://job-boards.greenhouse.io/affirm/jobs/7799295003"
+    },
+    {
+      "company": "Chime",
+      "provider": "greenhouse",
+      "boardToken": "chime",
+      "title": "Principal Product Designer, Spending",
+      "location": "San Francisco, CA, USA",
+      "url": "https://boards.greenhouse.io/chime/jobs/8342899002?gh_jid=8342899002"
+    },
+    {
+      "company": "Chime",
+      "provider": "greenhouse",
+      "boardToken": "chime",
+      "title": "Product Designer",
+      "location": "New York, NY, USA; San Francisco, CA, USA",
+      "url": "https://boards.greenhouse.io/chime/jobs/8525323002?gh_jid=8525323002"
+    },
+    {
+      "company": "Ramp",
+      "provider": "ashby",
+      "boardToken": "ramp",
+      "title": "Product Designer",
+      "location": "New York, NY (HQ)",
+      "url": "https://jobs.ashbyhq.com/ramp/eca54d0e-232a-4c3e-bfcc-d6c6add393f5"
+    },
+    {
+      "company": "Ramp",
+      "provider": "ashby",
+      "boardToken": "ramp",
+      "title": "Director, Product Design",
+      "location": "New York, NY (HQ)",
+      "url": "https://jobs.ashbyhq.com/ramp/78b98c66-af59-4fa8-a5ae-d8af8d737976"
+    },
+    {
+      "company": "Plaid",
+      "provider": "ashby",
+      "boardToken": "plaid",
+      "title": "Product Design Manager - Dashboard",
+      "location": "San Francisco HQ",
+      "url": "https://jobs.ashbyhq.com/plaid/110a7bbd-7583-488d-afb2-d6e02fcce533"
+    },
+    {
+      "company": "Robinhood",
+      "provider": "greenhouse",
+      "boardToken": "robinhood",
+      "title": "Senior Product Designer",
+      "location": "Menlo Park, CA; New York, NY",
+      "url": "https://boards.greenhouse.io/robinhood/jobs/7490017?t=gh_src=&gh_jid=7490017"
+    },
+    {
+      "company": "Robinhood",
+      "provider": "greenhouse",
+      "boardToken": "robinhood",
+      "title": "Senior Product Designer, Redesign",
+      "location": "Menlo Park, CA; New York, NY",
+      "url": "https://boards.greenhouse.io/robinhood/jobs/6494244?t=gh_src=&gh_jid=6494244"
+    },
+    {
+      "company": "Robinhood",
+      "provider": "greenhouse",
+      "boardToken": "robinhood",
+      "title": "Staff Product Designer, National Impact",
+      "location": "Menlo Park, CA; New York, NY",
+      "url": "https://boards.greenhouse.io/robinhood/jobs/7804648?t=gh_src=&gh_jid=7804648"
+    },
+    {
+      "company": "Coinbase",
+      "provider": "greenhouse",
+      "boardToken": "coinbase",
+      "title": "Senior Product Designer, Coinbase One",
+      "location": "Remote - USA",
+      "url": "https://www.coinbase.com/careers/positions/8114474?gh_jid=8114474"
+    },
+    {
+      "company": "Coinbase",
+      "provider": "greenhouse",
+      "boardToken": "coinbase",
+      "title": "Staff Product Designer (Experience & Engagement)",
+      "location": "Remote - USA",
+      "url": "https://www.coinbase.com/careers/positions/8014564?gh_jid=8014564"
+    },
+    {
+      "company": "Coinbase",
+      "provider": "greenhouse",
+      "boardToken": "coinbase",
+      "title": "Staff Product Designer, Financial Services Lead",
+      "location": "Remote - USA",
+      "url": "https://www.coinbase.com/careers/positions/8064324?gh_jid=8064324"
+    },
+    {
+      "company": "Addepar",
+      "provider": "greenhouse",
+      "boardToken": "addepar1",
+      "title": "Sr. Product Designer - Data Management",
+      "location": "Remote, UK",
+      "url": "https://job-boards.greenhouse.io/addepar1/jobs/8387739002"
+    },
+    {
+      "company": "GitLab",
+      "provider": "greenhouse",
+      "boardToken": "gitlab",
+      "title": "Senior Product Designer, AI",
+      "location": "Remote, Canada; Remote, US",
+      "url": "https://job-boards.greenhouse.io/gitlab/jobs/8464608002"
+    },
+    {
+      "company": "Vercel",
+      "provider": "greenhouse",
+      "boardToken": "vercel",
+      "title": "Senior Product Designer, Growth",
+      "location": "Hybrid - San Francisco, New York City",
+      "url": "https://job-boards.greenhouse.io/vercel/jobs/6131210004"
+    },
+    {
+      "company": "Databricks",
+      "provider": "greenhouse",
+      "boardToken": "databricks",
+      "title": "Sr. Product Designer, AI/BI",
+      "location": "Mountain View, California; San Francisco, California; Seattle, Washington",
+      "url": "https://databricks.com/company/careers/open-positions/job?gh_jid=8429978002"
+    },
+    {
+      "company": "Databricks",
+      "provider": "greenhouse",
+      "boardToken": "databricks",
+      "title": "Staff Product Designer, AI Products",
+      "location": "New York City, New York",
+      "url": "https://databricks.com/company/careers/open-positions/job?gh_jid=8584704002"
+    },
+    {
+      "company": "Twilio",
+      "provider": "greenhouse",
+      "boardToken": "twilio",
+      "title": "Staff Product Designer",
+      "location": "Remote - US",
+      "url": "https://job-boards.greenhouse.io/twilio/jobs/8039842"
+    },
+    {
+      "company": "Figma",
+      "provider": "greenhouse",
+      "boardToken": "figma",
+      "title": "Manager, Product Design",
+      "location": "San Francisco, CA • New York, NY • United States",
+      "url": "https://boards.greenhouse.io/figma/jobs/5790585004?gh_jid=5790585004"
+    },
+    {
+      "company": "Figma",
+      "provider": "greenhouse",
+      "boardToken": "figma",
+      "title": "Product Designer, AI Models",
+      "location": "San Francisco, CA • New York, NY • United States",
+      "url": "https://boards.greenhouse.io/figma/jobs/5711913004?gh_jid=5711913004"
+    },
+    {
+      "company": "Figma",
+      "provider": "greenhouse",
+      "boardToken": "figma",
+      "title": "Product Designer, CMS",
+      "location": "San Francisco, CA • New York, NY • United States",
+      "url": "https://boards.greenhouse.io/figma/jobs/6126976004?gh_jid=6126976004"
+    },
+    {
+      "company": "Figma",
+      "provider": "greenhouse",
+      "boardToken": "figma",
+      "title": "Product Designer, Design, Dev, & AI Tools",
+      "location": "San Francisco, CA • New York, NY • United States",
+      "url": "https://boards.greenhouse.io/figma/jobs/5711468004?gh_jid=5711468004"
+    },
+    {
+      "company": "Figma",
+      "provider": "greenhouse",
+      "boardToken": "figma",
+      "title": "Product Designer - Figma Weave (Tel Aviv, Israel)",
+      "location": "Tel Aviv, Israel",
+      "url": "https://boards.greenhouse.io/figma/jobs/5991320004?gh_jid=5991320004"
+    },
+    {
+      "company": "Figma",
+      "provider": "greenhouse",
+      "boardToken": "figma",
+      "title": "Product Designer, Growth & Monetization",
+      "location": "San Francisco, CA • New York, NY • United States",
+      "url": "https://boards.greenhouse.io/figma/jobs/5711595004?gh_jid=5711595004"
+    },
+    {
+      "company": "Dropbox",
+      "provider": "greenhouse",
+      "boardToken": "dropbox",
+      "title": "Director, Product Design",
+      "location": "Remote - Canada: Select locations",
+      "url": "https://jobs.dropbox.com/listing/7822807?gh_jid=7822807"
+    },
+    {
+      "company": "Dropbox",
+      "provider": "greenhouse",
+      "boardToken": "dropbox",
+      "title": "Principal Product Designer",
+      "location": "Remote - Canada: Select locations",
+      "url": "https://jobs.dropbox.com/listing/8003390?gh_jid=8003390"
+    },
+    {
+      "company": "Dropbox",
+      "provider": "greenhouse",
+      "boardToken": "dropbox",
+      "title": "Staff Product Designer",
+      "location": "Remote - Canada: Select locations",
+      "url": "https://jobs.dropbox.com/listing/8092715?gh_jid=8092715"
+    },
+    {
+      "company": "Reddit",
+      "provider": "greenhouse",
+      "boardToken": "reddit",
+      "title": "Staff Product Designer, Growth",
+      "location": "Remote - United States",
+      "url": "https://job-boards.greenhouse.io/reddit/jobs/7701558"
+    },
+    {
+      "company": "OpenAI",
+      "provider": "ashby",
+      "boardToken": "openai",
+      "title": "Product Designer, People Innovation Labs",
+      "location": "San Francisco",
+      "url": "https://jobs.ashbyhq.com/openai/3874db80-f3ec-4dd1-8d56-6441e8f7299d"
+    },
+    {
+      "company": "OpenAI",
+      "provider": "ashby",
+      "boardToken": "openai",
+      "title": "Product Designer, Payments",
+      "location": "San Francisco",
+      "url": "https://jobs.ashbyhq.com/openai/3813977e-5940-456d-bf5a-16efcdc3a6dc"
+    },
+    {
+      "company": "OpenAI",
+      "provider": "ashby",
+      "boardToken": "openai",
+      "title": "Product Designer, Engineering Acceleration",
+      "location": "Seattle",
+      "url": "https://jobs.ashbyhq.com/openai/73fdf2c0-4318-4b13-addc-b66bc1308ba4"
+    },
+    {
+      "company": "Anthropic",
+      "provider": "greenhouse",
+      "boardToken": "anthropic",
+      "title": "Product Design, Manager",
+      "location": "San Francisco, CA | New York City, NY | Seattle, WA",
+      "url": "https://job-boards.greenhouse.io/anthropic/jobs/5109653008"
+    },
+    {
+      "company": "Scale AI",
+      "provider": "greenhouse",
+      "boardToken": "scaleai",
+      "title": "Senior Product Design Manager",
+      "location": "San Francisco, CA; New York, NY",
+      "url": "https://job-boards.greenhouse.io/scaleai/jobs/4721008005"
+    },
+    {
+      "company": "Vanta",
+      "provider": "ashby",
+      "boardToken": "vanta",
+      "title": "Head of Design",
+      "location": "Remote U.S.",
+      "url": "https://jobs.ashbyhq.com/vanta/19837d21-971e-4b9d-b078-320895fae28a"
+    },
+    {
+      "company": "Vanta",
+      "provider": "ashby",
+      "boardToken": "vanta",
+      "title": "Staff Product Designer, Design Systems",
+      "location": "Remote U.S.",
+      "url": "https://jobs.ashbyhq.com/vanta/0fcbc935-76c7-4eac-b522-af421ed200c9"
+    },
+    {
+      "company": "TRM Labs",
+      "provider": "ashby",
+      "boardToken": "trm-labs",
+      "title": "Head of Product Design",
+      "location": "North America",
+      "url": "https://jobs.ashbyhq.com/trm-labs/16660699-5a97-42da-a8b7-9b91f81cf199"
+    },
+    {
+      "company": "AlphaSense",
+      "provider": "greenhouse",
+      "boardToken": "alphasense",
+      "title": "Director, Product Design (AI Experience)",
+      "location": "New York, New York, United States; Remote - United States",
+      "url": "https://job-boards.greenhouse.io/alphasense/jobs/8678097002"
+    },
+    {
+      "company": "AlphaSense",
+      "provider": "greenhouse",
+      "boardToken": "alphasense",
+      "title": "Senior/Staff Product Designer",
+      "location": "New York, New York, United States; Remote - United States",
+      "url": "https://job-boards.greenhouse.io/alphasense/jobs/8530664002"
+    },
+    {
+      "company": "AlphaSense",
+      "provider": "greenhouse",
+      "boardToken": "alphasense",
+      "title": "Staff/Senior Product Designer, Mobile",
+      "location": "Remote - United Kingdom",
+      "url": "https://job-boards.greenhouse.io/alphasense/jobs/8516322002"
+    },
+    {
+      "company": "AlphaSense",
+      "provider": "greenhouse",
+      "boardToken": "alphasense",
+      "title": "Staff/Senior Product Designer, Mobile",
+      "location": "Helsinki, Uusimaa, Finland",
+      "url": "https://job-boards.greenhouse.io/alphasense/jobs/8322118002"
+    },
+    {
+      "company": "Instacart",
+      "provider": "greenhouse",
+      "boardToken": "instacart",
+      "title": "Sr. Product Designer II - Design Systems",
+      "location": "Canada - Remote (ON, AB, BC, or NS Only)",
+      "url": "https://instacart.careers/job/?gh_jid=8026686"
+    },
+    {
+      "company": "Instacart",
+      "provider": "greenhouse",
+      "boardToken": "instacart",
+      "title": "Staff Experience Designer",
+      "location": "Canada - Remote (ON, AB, BC, or NS Only)",
+      "url": "https://instacart.careers/job/?gh_jid=8084090"
+    },
+    {
+      "company": "Faire",
+      "provider": "greenhouse",
+      "boardToken": "faire",
+      "title": "Staff Product Designer",
+      "location": "New York City, NY; San Francisco, CA",
+      "url": "https://boards.greenhouse.io/faire/jobs/8445628002?gh_jid=8445628002"
+    }
+  ]
+}

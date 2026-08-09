@@ -1,5 +1,20 @@
 import type { PrismaClient } from "@prisma/client";
 
+/**
+ * SQLite binds a limited number of parameters per statement, and a large board
+ * feed can carry hundreds of identifiers. Positive `in` filters are chunked;
+ * negation is handled in memory because Prisma cannot split a `notIn`.
+ */
+const PARAMETER_CHUNK = 400;
+
+function chunked<T>(values: T[], size = PARAMETER_CHUNK) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+}
+
 export async function reconcileCompleteFeed(
   database: PrismaClient,
   input: {
@@ -15,9 +30,9 @@ export async function reconcileCompleteFeed(
     company: { name: input.companyName },
     sourceJobId: { not: null },
   } as const;
-  if (sourceJobIds.length) {
+  for (const chunk of chunked(sourceJobIds)) {
     await database.job.updateMany({
-      where: { ...scope, sourceJobId: { in: sourceJobIds } },
+      where: { ...scope, sourceJobId: { in: chunk } },
       data: {
         lastSeenAt: input.observedAt,
         closedAt: null,
@@ -25,14 +40,12 @@ export async function reconcileCompleteFeed(
       },
     });
   }
-  const missing = await database.job.findMany({
-    where: {
-      ...scope,
-      ...(sourceJobIds.length ? { sourceJobId: { notIn: sourceJobIds } } : {}),
-      closedAt: null,
-    },
+  const observed = new Set(sourceJobIds);
+  const open = await database.job.findMany({
+    where: { ...scope, closedAt: null },
     select: { id: true, sourceJobId: true },
   });
+  const missing = open.filter((job) => job.sourceJobId && !observed.has(job.sourceJobId));
   if (!missing.length) return { closed: 0, observed: sourceJobIds.length };
   await database.$transaction(missing.map((job) => database.job.update({
     where: { id: job.id },

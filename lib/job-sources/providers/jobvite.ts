@@ -11,6 +11,7 @@ import type {
   JobSearchCriteria,
   ProviderContext,
 } from "../types";
+import { evaluateRoleRelevance } from "../role-relevance";
 import {
   employerFeedStore,
   type EmployerFeedConfiguration,
@@ -169,8 +170,8 @@ export class JobviteProvider implements JobSourceProvider {
     for (const record of active) {
       const title = required(record, "title");
       const place = location(record);
-      const titleMatch = !criteria.titles.length
-        || criteria.titles.some((term) => title.toLowerCase().includes(term.toLowerCase()));
+      const relevance = evaluateRoleRelevance(title);
+      const titleMatch = relevance.relevant;
       const locationMatch = !criteria.locations.length
         || criteria.locations.some((term) => place.toLowerCase().includes(term.toLowerCase()));
       if (titleMatch) diagnostics.titleMatches += 1;
@@ -184,10 +185,10 @@ export class JobviteProvider implements JobSourceProvider {
           title,
           canonicalUrl: absoluteUrl(record, "detailLink"),
           reason,
-          matchedTitleTerms: titleMatch ? criteria.titles : [],
-          excludedTitleTerms: titleMatch ? [] : criteria.titles,
+          matchedTitleTerms: relevance.signals,
+          excludedTitleTerms: relevance.rejectedBy ? [relevance.rejectedBy] : [],
           detail: reason === "title"
-            ? `Title did not match: ${criteria.titles.join(", ")}.`
+            ? relevance.detail
             : `Location did not match: ${criteria.locations.join(", ")}.`,
         });
         continue;

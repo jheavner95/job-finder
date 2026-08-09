@@ -1,7 +1,3 @@
-import { copyFileSync, unlinkSync } from "node:fs";
-import { randomUUID } from "node:crypto";
-
-import { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -9,22 +5,13 @@ import {
   ensureOnboarding,
   getOnboardingState,
 } from "../lib/onboarding";
+import { createTestDatabase, releaseTestDatabases } from "./test-database";
 
-const databases: Array<{ client: PrismaClient; path: string }> = [];
-
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map(async ({ client, path }) => {
-    await client.$disconnect();
-    unlinkSync(path);
-  }));
-});
+afterEach(releaseTestDatabases);
 
 describe("candidate onboarding", () => {
   it("shows Getting Started on first launch and hides it after completion", async () => {
-    const path = `/tmp/job-search-intelligence-onboarding-${randomUUID()}.db`;
-    copyFileSync("prisma/dev.db", path);
-    const database = new PrismaClient({ datasourceUrl: `file:${path}` });
-    databases.push({ client: database, path });
+    const database = await createTestDatabase({ label: "onboarding" });
 
     await database.candidateOnboarding.deleteMany({
       where: { profileId: "primary-candidate" },

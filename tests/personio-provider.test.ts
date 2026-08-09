@@ -1,7 +1,3 @@
-import { copyFileSync, unlinkSync } from "node:fs";
-import { randomUUID } from "node:crypto";
-
-import { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DiscoveryService } from "../lib/job-sources/services/discovery-service";
@@ -21,15 +17,9 @@ import {
   personioMultipleJobs,
   personioSingleJob,
 } from "./fixtures/personio";
+import { createTestDatabase, releaseTestDatabases } from "./test-database";
 
-const databases: Array<{ client: PrismaClient; path: string }> = [];
-
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map(async ({ client, path }) => {
-    await client.$disconnect();
-    unlinkSync(path);
-  }));
-});
+afterEach(releaseTestDatabases);
 
 const context: ProviderContext = {
   company: "Example Products",
@@ -66,11 +56,14 @@ describe("Personio public connector", () => {
       { titles: [], locations: [] },
       context,
     );
+    // Both positions are parsed as distinct records; the Berlin UX Researcher
+    // is then screened out by the shared product design relevance test.
     expect(result.jobs.map((job) => [job.externalId, job.location])).toEqual([
       ["4103", "Chicago"],
-      ["4104", "Berlin"],
     ]);
     expect(result.diagnostics.totalJobsDiscovered).toBe(2);
+    expect(result.diagnostics.excludedJobs.map((job) => [job.externalId, job.reason]))
+      .toEqual([["4104", "title"]]);
   });
 
   it("selects the configured locale deterministically and defaults to English", async () => {
@@ -158,10 +151,7 @@ describe("Personio public connector", () => {
   });
 
   it("persists provider/company/position identity and prevents repeat imports", async () => {
-    const path = `/tmp/job-search-intelligence-personio-${randomUUID()}.db`;
-    copyFileSync("prisma/dev.db", path);
-    const database = new PrismaClient({ datasourceUrl: `file:${path}` });
-    databases.push({ client: database, path });
+    const database = await createTestDatabase({ label: "personio" });
     const provider = new PersonioProvider(vi.fn(() => xmlResponse(personioSingleJob)));
     const registry = new JobSourceRegistry().register(provider);
     const discovery = new DiscoveryService(database, registry);

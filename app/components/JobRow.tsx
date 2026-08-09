@@ -1,11 +1,13 @@
 import Link from "next/link";
+import {
+  type OpportunityTier,
+  tierForScore,
+  tierTone,
+} from "@/lib/opportunity-tiers";
 import type { JobListItem } from "@/lib/view-models";
 
-function scoreTone(score: number) {
-  if (score >= 80) return "strong";
-  if (score >= 50) return "possible";
-  return "low";
-}
+type JobRowItem = JobListItem & { tier?: OpportunityTier };
+
 export function StatusPill({ status }: { status: JobListItem["status"] }) {
   return (
     <span className={`status status-${status.toLowerCase().replace(" ", "-")}`}>
@@ -14,7 +16,8 @@ export function StatusPill({ status }: { status: JobListItem["status"] }) {
   );
 }
 
-export function JobRow({ job }: { job: JobListItem }) {
+export function JobRow({ job }: { job: JobRowItem }) {
+  const tier = job.tier ?? tierForScore(job.score);
   return (
     <article className="job-row">
       <Link
@@ -43,9 +46,10 @@ export function JobRow({ job }: { job: JobListItem }) {
         </span>
       </Link>
       <div className="job-side">
-        <div className={`score score-${scoreTone(job.score)}`}>
+        <div className={`score score-${tierTone(tier)}`}>
           <strong>{job.score}</strong><span>match</span>
         </div>
+        <span className="confidence-label">{tier}</span>
         <span className="confidence-label">{job.confidence}% confidence</span>
         {job.eligibility === "excluded" && (
           <span className="eligibility-label">Hard requirement conflict</span>

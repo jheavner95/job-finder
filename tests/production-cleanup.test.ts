@@ -1,28 +1,15 @@
-import { copyFileSync, readFileSync, unlinkSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
-import { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { auditLocalData, cleanupLocalData } from "../lib/data-cleanup";
 import { APP_ERROR_CODES, createAppError, diagnosticText, mapError } from "../lib/errors/app-error";
+import { createTestDatabase, releaseTestDatabases } from "./test-database";
 
-const databases: Array<{ client: PrismaClient; path: string }> = [];
+const isolatedDatabase = () => createTestDatabase({ label: "cleanup" });
 
-async function isolatedDatabase() {
-  const path = `/tmp/job-finder-cleanup-${randomUUID()}.db`;
-  copyFileSync("prisma/dev.db", path);
-  const database = new PrismaClient({ datasourceUrl: `file:${path}` });
-  databases.push({ client: database, path });
-  return database;
-}
-
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map(async ({ client, path }) => {
-    await client.$disconnect();
-    unlinkSync(path);
-  }));
-});
+afterEach(releaseTestDatabases);
 
 describe("production data cleanup", () => {
   it("supports a genuinely empty first-run data state", async () => {

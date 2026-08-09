@@ -24,7 +24,11 @@
     "db:restore": "node scripts/sqlite-restore.mjs",
     "db:seed": "prisma db seed",
     "data:audit": "tsx scripts/data-maintenance.ts audit",
-    "data:cleanup": "tsx scripts/data-maintenance.ts cleanup"
+    "data:cleanup": "tsx scripts/data-maintenance.ts cleanup",
+    "coverage:benchmark": "tsx scripts/coverage-benchmark.ts",
+    "coverage:discover": "tsx scripts/discover-employers.ts",
+    "coverage:scan": "tsx scripts/run-discovery-scan.ts",
+    "coverage:purge": "tsx scripts/purge-irrelevant-jobs.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

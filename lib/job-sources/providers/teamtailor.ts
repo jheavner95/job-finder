@@ -19,6 +19,7 @@ import {
 import { isProviderError, ProviderError } from "../errors";
 import { executeProviderRequest, type RequestRuntime } from "../request-policy";
 import { stringValue, validateProviderRecords } from "./provider-utils";
+import { evaluateRoleRelevance } from "../role-relevance";
 
 type JsonApiResource = {
   id?: unknown;
@@ -151,11 +152,17 @@ function analyze(posting: TeamtailorPosting, criteria: JobSearchCriteria) {
   );
   const remote = stringValue(attribute(posting.resource, "remote-status"));
   const location = [...locations, remote && remote !== "none" ? remote : ""].filter(Boolean).join(" · ");
-  const titleMatch = !criteria.titles.length
-    || criteria.titles.some((term) => title.toLowerCase().includes(term.toLowerCase()));
+  const relevance = evaluateRoleRelevance(title, {
+    department: relatedNames(
+      posting,
+      "departments",
+      relationshipIds(posting.resource, "department"),
+    ).join(" "),
+  });
+  const titleMatch = relevance.relevant;
   const locationMatch = !criteria.locations.length
     || criteria.locations.some((term) => location.toLowerCase().includes(term.toLowerCase()));
-  return { title, location, titleMatch, locationMatch };
+  return { title, location, titleMatch, locationMatch, relevance };
 }
 
 export class TeamtailorProvider implements JobSourceProvider {
@@ -247,10 +254,10 @@ export class TeamtailorProvider implements JobSourceProvider {
           title: result.title,
           canonicalUrl: canonicalUrl(posting.resource),
           reason,
-          matchedTitleTerms: result.titleMatch ? criteria.titles : [],
-          excludedTitleTerms: result.titleMatch ? [] : criteria.titles,
+          matchedTitleTerms: result.relevance.signals,
+          excludedTitleTerms: result.relevance.rejectedBy ? [result.relevance.rejectedBy] : [],
           detail: reason === "title"
-            ? `Title did not match: ${criteria.titles.join(", ")}.`
+            ? result.relevance.detail
             : `Location did not match: ${criteria.locations.join(", ")}.`,
         });
         continue;

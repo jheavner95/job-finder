@@ -12,6 +12,57 @@ import { nextRunAt, type ScheduleType } from "./schedule";
 
 const LOCK_ID = "discovery-scheduler";
 const LOCK_TIMEOUT_MS = 60 * 60 * 1_000;
+/**
+ * Connectors run concurrently, but bounded. Employer discovery took the board
+ * count from a handful into the hundreds; an unbounded fan-out would open one
+ * request per board at once, which is impolite to the provider APIs and starves
+ * SQLite of write slots.
+ */
+const DEFAULT_MAX_CONCURRENCY = 5;
+
+/**
+ * Resident-set ceiling for a discovery run. Above this the scheduler stops
+ * claiming NEW connectors; work already in flight finishes normally, the batch
+ * closes through its usual path, and the scheduler lease is released. Nothing
+ * is killed mid-transaction and no persisted work is discarded — connectors
+ * that were never claimed simply did not run this batch.
+ */
+const DEFAULT_MEMORY_CEILING_MB = Number(process.env.DISCOVERY_MEMORY_CEILING_MB ?? 1200);
+
+function residentMegabytes() {
+  return process.memoryUsage().rss / (1024 * 1024);
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<R>,
+  onStop?: (info: { claimed: number; total: number; rssMb: number }) => void,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  let halted = false;
+  const runners = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    for (;;) {
+      if (halted) return;
+      // Checked between whole connectors — never inside one.
+      const rssMb = residentMegabytes();
+      if (rssMb > DEFAULT_MEMORY_CEILING_MB) {
+        if (!halted) {
+          halted = true;
+          onStop?.({ claimed: Math.min(cursor, items.length), total: items.length, rssMb });
+        }
+        return;
+      }
+      const index = cursor;
+      cursor += 1;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index]);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
 
 type SchedulerTrigger = "manual" | "scheduled";
 
@@ -27,6 +78,7 @@ export class DiscoveryScheduler {
     private readonly registry: JobSourceRegistry = jobSourceRegistry,
     private readonly notifications: NotificationPublisher =
       new InAppNotificationPublisher(database),
+    private readonly maxConcurrency: number = DEFAULT_MAX_CONCURRENCY,
   ) {}
 
   async run(options: {
@@ -82,7 +134,8 @@ export class DiscoveryScheduler {
           },
         },
       });
-      const connectorResults = await Promise.all(connectors.map(async (connector) => {
+      let memoryStop: { claimed: number; total: number; rssMb: number } | null = null;
+      const connectorResults = await mapWithConcurrency(connectors, this.maxConcurrency, async (connector) => {
         const cancellation = await this.database.discoveryBatch.findUnique({
           where: { id: batch.id },
           select: { cancelRequested: true },
@@ -183,10 +236,20 @@ export class DiscoveryScheduler {
             });
           }
         }
-      }));
+      }, (info) => { memoryStop = info; });
       connectorResults.forEach((result) => {
         if (result) this.addSummary(summary, result);
       });
+      if (memoryStop) {
+        const stop = memoryStop as { claimed: number; total: number; rssMb: number };
+        await this.notifications.publish({
+          type: "connector_failure",
+          title: "Discovery stopped early to protect memory",
+          message: `Resident memory reached ${Math.round(stop.rssMb)}MB, so the run stopped after ${stop.claimed} of ${stop.total} boards. Completed boards were saved; the remainder will be picked up on the next run.`,
+          href: "/discovery",
+          metadata: { batchId: batch.id, claimed: stop.claimed, total: stop.total, rssMb: Math.round(stop.rssMb) },
+        });
+      }
 
       const completedAt = new Date();
       const cancellation = await this.database.discoveryBatch.findUnique({

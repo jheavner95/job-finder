@@ -13,6 +13,16 @@ import {
   ensureOpportunityIntelligence,
 } from "./candidate-intelligence/service";
 import { normalizePostingContent, plainPostingText } from "./job-content";
+import {
+  type Tiered,
+  compareByTier,
+  isReviewable,
+  resolveTier,
+} from "./opportunity-tiers";
+
+/** A list item carrying the opportunity tier derived at evaluation time. */
+export type TieredJobListItem = Tiered<JobListItem>;
+export type TieredJobDetailModel = Tiered<JobDetailModel>;
 
 const jobInclude = {
   company: true,
@@ -125,12 +135,14 @@ function clean(value: string) {
   return plainPostingText(value);
 }
 
-function toListItem(job: IncludedJob): JobListItem {
+function toListItem(job: IncludedJob): TieredJobListItem {
   const evaluation = job.evaluations[0];
   const metadata = evaluation
     ? evaluationMetadata(evaluation.reasoning)
     : { confidence: 0, eligibility: "eligible" as const };
+  const score = evaluation?.score ?? 0;
   return {
+    tier: resolveTier(score, evaluation?.reasoning),
     id: job.id,
     title: clean(job.title),
     company: clean(job.company.name),
@@ -149,7 +161,7 @@ function toListItem(job: IncludedJob): JobListItem {
     sourceUrl: job.sourceUrl,
     verification: verification(job),
     status: currentStatus(job),
-    score: evaluation?.score ?? 0,
+    score,
     confidence: metadata.confidence,
     eligibility: metadata.eligibility,
     summary: evaluation
@@ -162,17 +174,21 @@ function toListItem(job: IncludedJob): JobListItem {
   };
 }
 
-export async function getJobs(): Promise<JobListItem[]> {
+/**
+ * Every non-synthetic opportunity, carrying its tier so callers can filter and
+ * sort by relevance band. Sorted by tier rank first, then score descending.
+ */
+export async function getJobs(): Promise<TieredJobListItem[]> {
   await ensureOpportunityIntelligence(prisma);
   const jobs = await prisma.job.findMany({
     where: { isSynthetic: false },
     include: jobInclude,
     orderBy: { title: "asc" },
   });
-  return jobs.map(toListItem).sort((a, b) => b.score - a.score);
+  return jobs.map(toListItem).sort(compareByTier);
 }
 
-export async function getJob(id: string): Promise<JobDetailModel | null> {
+export async function getJob(id: string): Promise<TieredJobDetailModel | null> {
   await ensureOpportunityIntelligence(prisma, { jobIds: [id] });
   const job = await prisma.job.findFirst({ where: { id, isSynthetic: false }, include: jobInclude });
   if (!job) return null;
@@ -240,16 +256,27 @@ export async function getJob(id: string): Promise<JobDetailModel | null> {
   };
 }
 
-export async function getDashboardSummary(): Promise<DashboardSummary> {
+/** Structurally a {@link DashboardSummary}, with the tier preserved. */
+export type TieredDashboardSummary = DashboardSummary & {
+  jobs: TieredJobListItem[];
+};
+
+export async function getDashboardSummary(): Promise<TieredDashboardSummary> {
   return { jobs: await getJobs() };
 }
 
 export async function getReportSummary(): Promise<ReportSummary> {
   const jobs = await getJobs();
+  const count = (predicate: (job: TieredJobListItem) => boolean) =>
+    jobs.filter(predicate).length;
   return {
     total: jobs.length,
-    strong: jobs.filter((job) => job.score >= 85).length,
-    possible: jobs.filter((job) => job.score >= 50 && job.score < 85).length,
-    rejected: jobs.filter((job) => job.score < 50).length,
+    strong: count(
+      (job) => job.tier === "Excellent Fit" || job.tier === "Strong Fit",
+    ),
+    possible: count(
+      (job) => job.tier === "Worth Reviewing" || job.tier === "Stretch",
+    ),
+    rejected: count((job) => !isReviewable(job.tier)),
   };
 }

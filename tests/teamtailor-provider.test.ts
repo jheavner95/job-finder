@@ -1,7 +1,5 @@
-import { copyFileSync, unlinkSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
-import { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MemoryCredentialStore } from "../lib/job-sources/credentials";
@@ -22,8 +20,8 @@ import {
   teamtailorPage,
   teamtailorSecondJob,
 } from "./fixtures/teamtailor";
+import { createTestDatabase, releaseTestDatabases } from "./test-database";
 
-const databases: Array<{ client: PrismaClient; path: string }> = [];
 const connectorId = "teamtailor-test-connector";
 const credential = {
   apiKey: "authorized-test-key",
@@ -40,20 +38,9 @@ const context: ProviderContext = {
   credentialRegion: "eu",
 };
 
-function database() {
-  const path = `/tmp/job-search-intelligence-teamtailor-${randomUUID()}.db`;
-  copyFileSync("prisma/dev.db", path);
-  const client = new PrismaClient({ datasourceUrl: `file:${path}` });
-  databases.push({ client, path });
-  return client;
-}
+const database = () => createTestDatabase({ label: "teamtailor" });
 
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map(async ({ client, path }) => {
-    await client.$disconnect();
-    unlinkSync(path);
-  }));
-});
+afterEach(releaseTestDatabases);
 
 function jsonResponse(value: unknown, status = 200, headers?: HeadersInit) {
   return Promise.resolve(new Response(JSON.stringify(value), {
@@ -193,7 +180,7 @@ describe("Teamtailor authorized connector", () => {
   });
 
   it("configures, replaces, tests, and safely removes credentials", async () => {
-    const db = database();
+    const db = await database();
     const id = randomUUID();
     await db.companyConnector.create({
       data: {
@@ -237,7 +224,7 @@ describe("Teamtailor authorized connector", () => {
   });
 
   it("does not store invalid credentials and disables expired credentials", async () => {
-    const db = database();
+    const db = await database();
     const id = randomUUID();
     await db.companyConnector.create({
       data: {
@@ -272,7 +259,7 @@ describe("Teamtailor authorized connector", () => {
   });
 
   it("validates credentials before robots and persists typed robots denial", async () => {
-    const db = database();
+    const db = await database();
     const id = randomUUID();
     const connector = await db.companyConnector.create({
       data: {
@@ -314,7 +301,7 @@ describe("Teamtailor authorized connector", () => {
   });
 
   it("prevents repeat imports and reconciles deletion only after a complete feed", async () => {
-    const db = database();
+    const db = await database();
     const id = randomUUID();
     const company = `Teamtailor Reconciliation ${id}`;
     const connector = await db.companyConnector.create({

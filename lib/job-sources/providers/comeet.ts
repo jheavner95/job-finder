@@ -8,9 +8,11 @@ import {
 import type {
   CanonicalJobPosting,
   DiscoveredJob,
+  DiscoveryDiagnostics,
   JobSearchCriteria,
   ProviderContext,
 } from "../types";
+import { evaluateRoleRelevance } from "../role-relevance";
 import {
   configuredHealth,
   connectorToken,
@@ -47,14 +49,6 @@ function positions(payload: unknown) {
   throw new ProviderError("SCHEMA_DRIFT", "Comeet feed positions must be a list.");
 }
 
-function matches(position: ComeetPosition, criteria: JobSearchCriteria) {
-  const title = stringValue(position.name).toLowerCase();
-  const location = stringValue(position.location?.name).toLowerCase();
-  return (!criteria.titles.length || criteria.titles.some((term) =>
-    title.includes(term.toLowerCase())))
-    && (!criteria.locations.length || criteria.locations.some((term) =>
-      location.includes(term.toLowerCase())));
-}
 
 export class ComeetProvider implements JobSourceProvider {
   readonly id = "comeet";
@@ -80,30 +74,57 @@ export class ComeetProvider implements JobSourceProvider {
       title: stringValue(position.name),
       url: stringValue(position.url_recruit_hosted_page),
     })));
-    const jobs = allPositions.filter((position) => matches(position, criteria)).map(
-      (position): DiscoveredJob => ({
+    const diagnostics: DiscoveryDiagnostics = {
+      totalJobsDiscovered: allPositions.length,
+      titleMatches: 0,
+      locationMatches: 0,
+      excludedByTitle: 0,
+      excludedByLocation: 0,
+      excludedByEmploymentType: 0,
+      excludedByHardExclusions: 0,
+      closedJobs: 0,
+      excludedJobs: [],
+    };
+    const jobs: DiscoveredJob[] = [];
+    for (const position of allPositions) {
+      const title = stringValue(position.name);
+      const place = stringValue(position.location?.name);
+      const relevance = evaluateRoleRelevance(title);
+      const locationMatch = !criteria.locations.length
+        || criteria.locations.some((term) => place.toLowerCase().includes(term.toLowerCase()));
+      if (relevance.relevant) diagnostics.titleMatches += 1;
+      if (relevance.relevant && locationMatch) diagnostics.locationMatches += 1;
+      if (!relevance.relevant || !locationMatch) {
+        const reason = relevance.relevant ? "location" as const : "title" as const;
+        if (reason === "title") diagnostics.excludedByTitle += 1;
+        else diagnostics.excludedByLocation += 1;
+        // Traceable exclusions keep the disposition ledger reconciling.
+        diagnostics.excludedJobs.push({
+          externalId: stringValue(position.uid),
+          title: title || "(untitled)",
+          canonicalUrl: stringValue(position.url_recruit_hosted_page),
+          reason,
+          matchedTitleTerms: relevance.signals,
+          excludedTitleTerms: relevance.rejectedBy ? [relevance.rejectedBy] : [],
+          detail: reason === "title"
+            ? relevance.detail
+            : `Location did not match: ${criteria.locations.join(", ")}.`,
+        });
+        continue;
+      }
+      jobs.push({
         providerId: this.id,
         externalId: stringValue(position.uid),
-        title: stringValue(position.name),
+        title,
         company: context.company,
-        location: stringValue(position.location?.name),
+        location: place,
         canonicalUrl: stringValue(position.url_recruit_hosted_page),
         discoveredVia: "canonical",
-      }),
-    );
+      });
+    }
     return {
       jobs,
-      diagnostics: {
-        totalJobsDiscovered: allPositions.length,
-        titleMatches: jobs.length,
-        locationMatches: jobs.length,
-        excludedByTitle: allPositions.length - jobs.length,
-        excludedByLocation: 0,
-        excludedByEmploymentType: 0,
-        excludedByHardExclusions: 0,
-        closedJobs: 0,
-        excludedJobs: [],
-      },
+      diagnostics,
       feed: {
         complete: true,
         sourceJobIds: allPositions.map((position) => stringValue(position.uid)).filter(Boolean),

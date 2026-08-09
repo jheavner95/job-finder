@@ -17,8 +17,24 @@ export type ProviderCapabilityRecord = {
   documentation?: string;
 };
 
+/**
+ * How a provider handles a robots.txt response that is *unavailable* rather
+ * than absent or explicit.
+ *
+ * `fail-closed` — anything other than 200 or 404 blocks the request. This is
+ * the default and stays the default for every provider.
+ *
+ * `rfc9309-unavailable` — a 400-499 response is treated as "Unavailable" per
+ * RFC 9309 §2.3.1.3 ("the crawler MAY access any resources on the server").
+ * Granted only where the target is a documented, unauthenticated public API
+ * and the 4xx is an artifact of a host-wide auth gate. 5xx, network failure,
+ * and an explicit Disallow still block.
+ */
+export type RobotsUnavailablePolicy = "fail-closed" | "rfc9309-unavailable";
+
 export type OperationalProviderCapability = {
   providerId: string;
+  robotsUnavailablePolicy: RobotsUnavailablePolicy;
   supportsRetryAfter: boolean;
   supportsPagination: boolean;
   supportsDeletion: boolean;
@@ -47,6 +63,7 @@ export type OperationalProviderCapability = {
 
 const hour = 60 * 60 * 1_000;
 const standard = {
+  robotsUnavailablePolicy: "fail-closed" as const,
   supportsRetryAfter: true,
   supportsPagination: false,
   supportsDeletion: true,
@@ -87,6 +104,14 @@ export const OPERATIONAL_PROVIDER_CAPABILITIES: OperationalProviderCapability[] 
   {
     ...standard,
     providerId: "ashby",
+    // api.ashbyhq.com returns HTTP 401 for /robots.txt — a host-wide auth gate
+    // that catches the policy file, not a crawler directive. The endpoint we
+    // call is Ashby's documented, unauthenticated Public Job Postings API
+    // (developers.ashbyhq.com/docs/public-job-posting-api). RFC 9309 §2.3.1.3
+    // classes a 4xx robots response as "Unavailable" and permits the request.
+    // Narrow to this provider; 5xx, network failure and an explicit Disallow
+    // still block.
+    robotsUnavailablePolicy: "rfc9309-unavailable",
     robotsTarget: ({ connectorKey }) => ({
       url: "https://api.ashbyhq.com/robots.txt",
       path: `/posting-api/job-board/${encoded(connectorKey)}`,

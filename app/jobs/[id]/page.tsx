@@ -13,12 +13,6 @@ import { SearchablePosting } from "./SearchablePosting";
 
 export const dynamic = "force-dynamic";
 
-function matchLabel(score: number) {
-  if (score >= 85) return "Excellent Match";
-  if (score >= 65) return "Good Match";
-  return "Possible Match";
-}
-
 function guidanceText(item: IntelligenceGuidanceItem) {
   return item.explanation || item.title;
 }
@@ -127,6 +121,7 @@ export default async function JobDetailPage({
 
   const canInspect = process.env.NODE_ENV === "development"
     || process.env.JOB_FINDER_DEVELOPER_MODE === "true";
+  const tier = job.tier;
   const reasons = strongestReasons(job);
   const concerns = mainConcerns(job);
   const readinessItems = readiness(job);
@@ -154,7 +149,7 @@ export default async function JobDetailPage({
           <small>Discovered {job.verification.importAge} · {job.verification.label}</small>
         </div>
         <div className="opportunity-score">
-          <strong>{job.score}</strong><span>Match</span><small>{matchLabel(job.score)}</small>
+          <strong>{job.score}</strong><span>Match</span><small>{tier}</small>
         </div>
         <OpportunityActions jobId={job.id} sourceUrl={job.sourceUrl} application={application} />
       </header>
@@ -163,7 +158,7 @@ export default async function JobDetailPage({
         <section className="match-summary" aria-labelledby="match-summary-title">
           <div>
             <p className="eyebrow">Should you apply?</p>
-            <h2 id="match-summary-title">{matchLabel(job.score)}</h2>
+            <h2 id="match-summary-title">{tier}</h2>
             <p className="coaching-lead">{job.intelligence?.topReason ?? job.summary}</p>
           </div>
           <div className="match-summary-columns">

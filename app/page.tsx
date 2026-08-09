@@ -7,17 +7,12 @@ import {
   getNextContextActions,
 } from "@/lib/context-presentation";
 import { presentDashboard } from "@/lib/dashboard-presentation";
+import { tierTone } from "@/lib/opportunity-tiers";
 import { getDashboardSummary } from "@/lib/queries";
 import { prisma } from "@/lib/db";
 import { applicationAttentionStates } from "@/lib/application-intelligence";
 
 export const dynamic = "force-dynamic";
-
-function scoreTone(score: number) {
-  if (score >= 80) return "strong";
-  if (score >= 50) return "possible";
-  return "low";
-}
 
 export default async function DashboardPage() {
   const [summary, readiness, lastScan, nextSchedule, applications] = await Promise.all([
@@ -132,13 +127,15 @@ export default async function DashboardPage() {
 
         {briefing.attention.length ? (
           <div className="attention-list">
-            {briefing.attention.map((job) => (
+            {briefing.attention.map((job) => {
+              const tier = job.tier;
+              return (
               <article className="attention-card" key={job.id}>
                 <div className="attention-score">
-                  <div className={`score score-${scoreTone(job.score)}`}>
+                  <div className={`score score-${tierTone(tier)}`}>
                     <strong>{job.score}</strong><span>match</span>
                   </div>
-                  <span>{job.confidence}% match confidence</span>
+                  <span>{tier} · {job.confidence}% match confidence</span>
                 </div>
                 <div className="attention-copy">
                   <p className="attention-status">{job.status}</p>
@@ -155,7 +152,8 @@ export default async function DashboardPage() {
                   </Link>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="briefing-empty">

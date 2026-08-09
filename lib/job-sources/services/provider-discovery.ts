@@ -236,7 +236,12 @@ export class ProviderDiscoveryRunner {
       let robots = robotsCache.get(cacheKey);
       if (!robots) {
         try {
-          robots = await checkRobots(target.url, target.path, this.client);
+          robots = await checkRobots(
+            target.url,
+            target.path,
+            this.client,
+            capability.robotsUnavailablePolicy,
+          );
           robotsCache.set(cacheKey, robots);
         } catch (error) {
           const typed = errorPersistence(error);

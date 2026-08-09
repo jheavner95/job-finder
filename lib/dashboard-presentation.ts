@@ -1,3 +1,9 @@
+import {
+  type OpportunityTier,
+  isReviewable,
+  tierForScore,
+  tierRank,
+} from "./opportunity-tiers";
 import type { JobListItem } from "./view-models";
 
 const REVIEW_STATUSES: JobListItem["status"][] = [
@@ -18,33 +24,35 @@ function statusCount(
   return jobs.filter((job) => statuses.includes(job.status)).length;
 }
 
+function tierOf(job: JobListItem & { tier?: OpportunityTier }): OpportunityTier {
+  return job.tier ?? tierForScore(job.score);
+}
+
+/**
+ * A job needs review when the user has not decided on it yet and its tier is
+ * worth their time. Only "Low Relevance" is held back — every other tier is
+ * inspectable, so a 45-point Stretch role no longer vanishes from the list
+ * while still being counted as awaiting review.
+ */
+function needsReview(job: JobListItem) {
+  return REVIEW_STATUSES.includes(job.status) && isReviewable(tierOf(job));
+}
+
 function attentionPriority(job: JobListItem) {
-  if (
-    job.score >= 85 &&
-    (job.status === "New" || job.status === "Strong Match")
-  ) {
-    return 1;
-  }
-  if (
-    job.score >= 50 &&
-    job.score < 85 &&
-    (job.status === "New" || job.status === "Possible")
-  ) {
-    return 2;
-  }
-  if (job.status === "Saved") return 3;
-  if (ACTIVE_APPLICATION_STATUSES.includes(job.status)) return 4;
+  // Reviewable opportunities come first, strongest tier first (1-4).
+  if (needsReview(job)) return tierRank(tierOf(job)) + 1;
+  if (job.status === "Saved") return 5;
+  if (ACTIVE_APPLICATION_STATUSES.includes(job.status)) return 6;
   return null;
 }
 
-export function presentDashboard(jobs: JobListItem[]) {
+export function presentDashboard<
+  T extends JobListItem & { tier?: OpportunityTier },
+>(jobs: T[]) {
   const prioritized = jobs
     .map((job) => ({ job, priority: attentionPriority(job) }))
     .filter(
-      (
-        item,
-      ): item is { job: JobListItem; priority: number } =>
-        item.priority !== null,
+      (item): item is { job: T; priority: number } => item.priority !== null,
     )
     .sort(
       (a, b) =>
@@ -53,10 +61,13 @@ export function presentDashboard(jobs: JobListItem[]) {
         a.job.title.localeCompare(b.job.title),
     );
   const attention = prioritized.slice(0, 2).map(({ job }) => job);
-  const strongAttentionCount = prioritized.filter(
-    ({ priority }) => priority === 1,
+  // The count and the list are derived from the same predicate, so the number
+  // shown can never disagree with what the attention list contains.
+  const reviewable = prioritized.filter(({ job }) => needsReview(job));
+  const strongAttentionCount = reviewable.filter(
+    ({ job }) => tierOf(job) === "Excellent Fit",
   ).length;
-  const awaitingReview = statusCount(jobs, REVIEW_STATUSES);
+  const awaitingReview = reviewable.length;
   const saved = statusCount(jobs, ["Saved"]);
   const recentlyClosed = statusCount(jobs, ["Closed", "Rejected"]);
   const activeApplications = jobs

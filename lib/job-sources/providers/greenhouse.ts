@@ -13,6 +13,7 @@ import type {
   DiscoveryDiagnostics,
 } from "../types";
 import { ProviderError } from "../errors";
+import { evaluateRoleRelevance, normalizeRoleTitle } from "../role-relevance";
 import {
   configuredHealth,
   connectorToken,
@@ -29,48 +30,33 @@ type GreenhouseJob = {
   metadata?: Array<{ name?: string; value?: string | string[] }>;
 };
 
-const DESIGN_ROLE_PATTERNS = [
-  /\bproduct designers?\b/,
-  /\bproduct design leads?\b/,
-  /\bux designers?\b/,
-  /\bdesign leads?\b/,
-  /\bdesign managers?\b/,
-  /\bdirectors? (?:of )?product design\b/,
-];
-
-function normalized(value: string) {
-  return value.toLowerCase().replace(/&/g, " and ").replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\bdesigners\b/g, "designer").replace(/\s+/g, " ").trim();
-}
-
-function titleTerms(title: string, criteria: JobSearchCriteria) {
-  const value = normalized(title);
-  const requested = criteria.titles.map(normalized).filter(Boolean);
-  const designSearch = requested.some((term) =>
-    /\b(product design|ux design|design lead|design manager)/.test(term));
-  const matched = requested.filter((term) => value.includes(term));
-  const roleVariant = designSearch && DESIGN_ROLE_PATTERNS.some((pattern) => pattern.test(value));
-  return { matches: !requested.length || matched.length > 0 || roleVariant, matched };
-}
-
+/**
+ * Screens one posting from the board LIST response.
+ *
+ * The list is deliberately fetched without `content=true`, so descriptions are
+ * not available here and must not be relied on. Location and hard-exclusion
+ * checks therefore consider the structured location and the title only; the
+ * full description is fetched per posting in `fetch()` for the small number of
+ * postings that survive this screen.
+ */
 function analyze(job: GreenhouseJob, criteria: JobSearchCriteria) {
   const rawTitle = stringValue(job.title);
-  const title = normalized(rawTitle);
+  const title = normalizeRoleTitle(rawTitle);
   const location = stringValue(job.location?.name).toLowerCase();
-  const content = textFromHtml(stringValue(job.content)).toLowerCase();
-  const locationText = `${location}\n${content}`;
-  const titleResult = titleTerms(rawTitle, criteria);
+  // Retrieval is gated by the shared discipline screen, never by the saved
+  // title strings: `criteria.titles` is a ranking input, not a filter.
+  const relevance = evaluateRoleRelevance(rawTitle);
   const locationMatch = !criteria.locations.length
-    || criteria.locations.some((value) => locationText.includes(value.toLowerCase()));
+    || criteria.locations.some((value) => location.includes(value.toLowerCase()));
   const employment = job.metadata?.filter((item) => /employment|commitment|type/i.test(stringValue(item.name)))
     .flatMap((item) => Array.isArray(item.value) ? item.value : [item.value]).map(stringValue).join(" ") ?? "";
   const employmentMatch = !criteria.employmentTypes?.length
     || criteria.employmentTypes.some((value) => employment.toLowerCase().includes(value.toLowerCase()));
   const hardTerm = criteria.hardExclusions?.find((term) =>
-    `${title}\n${content}`.includes(term.toLowerCase()));
+    title.includes(term.toLowerCase()));
   const closed = !job.absolute_url || !job.id;
   const reason = closed ? "closed"
-    : !titleResult.matches ? "title"
+    : !relevance.relevant ? "title"
       : !locationMatch ? "location"
         : !employmentMatch ? "employment_type"
           : hardTerm ? "hard_exclusion"
@@ -78,11 +64,11 @@ function analyze(job: GreenhouseJob, criteria: JobSearchCriteria) {
   return {
     accepted: reason === null,
     reason,
-    titleMatch: titleResult.matches,
+    titleMatch: relevance.relevant,
     locationMatch,
-    matchedTitleTerms: titleResult.matched,
-    excludedTitleTerms: titleResult.matches ? [] : criteria.titles,
-    detail: reason === "title" ? `Title did not match any saved role variant: ${criteria.titles.join(", ")}.`
+    matchedTitleTerms: relevance.signals,
+    excludedTitleTerms: relevance.rejectedBy ? [relevance.rejectedBy] : [],
+    detail: reason === "title" ? relevance.detail
       : reason === "location" ? `Location did not match: ${criteria.locations.join(", ")}.`
         : reason === "employment_type" ? `Employment type "${employment || "unknown"}" was not allowed.`
           : reason === "hard_exclusion" ? `Posting contained hard exclusion "${hardTerm}".`
@@ -103,10 +89,15 @@ export class GreenhouseProvider implements JobSourceProvider {
 
   async discoverDetailed(criteria: JobSearchCriteria, context: ProviderContext) {
     const board = encodeURIComponent(connectorToken(context));
+    // `content=true` would attach the full HTML description of every posting on
+    // the board — measured at 9.9MB for a 1,289-posting board versus 0.8MB
+    // without. Screening is title-based, and the descriptions of postings that
+    // survive screening are fetched individually in `fetch()`, so the bulk
+    // descriptions were downloaded and discarded.
     const payload = await fetchJson(
       this.id,
       this.client,
-      `https://boards-api.greenhouse.io/v1/boards/${board}/jobs?content=true`,
+      `https://boards-api.greenhouse.io/v1/boards/${board}/jobs`,
       context,
     ) as { jobs?: GreenhouseJob[] };
     if (!Array.isArray(payload.jobs)) {

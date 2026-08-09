@@ -18,6 +18,7 @@ import {
   type RequestRuntime,
 } from "../request-policy";
 export { retryAfterMilliseconds } from "../request-policy";
+import { evaluateRoleRelevance } from "../role-relevance";
 
 type JobScoreCustomField = { label?: unknown; content?: unknown };
 
@@ -167,8 +168,10 @@ function analyze(job: JobScoreJob, criteria: JobSearchCriteria) {
   const location = jobLocation(job);
   const type = employmentType(job);
   const description = stringValue(job.description);
-  const titleMatch = !criteria.titles.length
-    || criteria.titles.some((term) => title.toLowerCase().includes(term.toLowerCase()));
+  const relevance = evaluateRoleRelevance(title, {
+    department: stringValue(job.department),
+  });
+  const titleMatch = relevance.relevant;
   const locationMatch = !criteria.locations.length
     || criteria.locations.some((term) => location.toLowerCase().includes(term.toLowerCase()));
   const employmentMatch = !criteria.employmentTypes?.length
@@ -180,7 +183,7 @@ function analyze(job: JobScoreJob, criteria: JobSearchCriteria) {
       : !locationMatch ? "location"
         : !employmentMatch ? "employment_type"
           : hardTerm ? "hard_exclusion" : null;
-  return { titleMatch, locationMatch, reason, hardTerm };
+  return { titleMatch, locationMatch, reason, hardTerm, relevance };
 }
 
 export class JobScoreProvider implements JobSourceProvider {
@@ -235,9 +238,9 @@ export class JobScoreProvider implements JobSourceProvider {
           title,
           canonicalUrl,
           reason: result.reason,
-          matchedTitleTerms: result.titleMatch ? criteria.titles : [],
-          excludedTitleTerms: result.titleMatch ? [] : criteria.titles,
-          detail: result.reason === "title" ? `Title did not match: ${criteria.titles.join(", ")}.`
+          matchedTitleTerms: result.relevance.signals,
+          excludedTitleTerms: result.relevance.rejectedBy ? [result.relevance.rejectedBy] : [],
+          detail: result.reason === "title" ? result.relevance.detail
             : result.reason === "location" ? `Location did not match: ${criteria.locations.join(", ")}.`
               : result.reason === "employment_type" ? `Employment type did not match: ${criteria.employmentTypes?.join(", ")}.`
                 : `Posting contained hard exclusion "${result.hardTerm}".`,

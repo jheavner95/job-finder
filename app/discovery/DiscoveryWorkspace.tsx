@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 type Provider = {
   id: string;
@@ -15,6 +15,16 @@ type Provider = {
   enabled: number;
   connectorIds: string[];
   companiesIndexed: number;
+  coverage: {
+    boardsKnown: number;
+    boardsValidated: number;
+    boardsFetched: number;
+    boardsStale: number;
+    jobsReachable: number;
+    designRoles: number;
+    reviewable: number;
+    autoDiscovered: number;
+  };
   lastScan: string | null;
   nextScan: string | null;
   jobsDiscovered: number;
@@ -46,6 +56,7 @@ type Provider = {
     company: string;
     location: string | null;
     score: number | null;
+    tier: string;
     isNew: boolean;
     closedAt: string | null;
     lastSeenAt: string | null;
@@ -170,14 +181,29 @@ function dateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function relative(value: string | null) {
+/**
+ * Relative time depends on the current clock, so the server and the client
+ * compute different strings for the same timestamp and React reports a
+ * hydration mismatch. `mounted` is false for the server render AND the first
+ * client render, which keeps those two in agreement; the relative form appears
+ * on the next commit.
+ *
+ * The pre-hydration value is the calendar date sliced straight out of the ISO
+ * string — no clock, no locale, no timezone — so it is byte-identical on both
+ * sides. Recency is still shown throughout.
+ */
+function relative(value: string | null, mounted = true) {
   if (!value) return "Never";
+  if (!mounted) return value.slice(0, 10);
   const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60_000));
   if (minutes < 1) return "Just now";
   if (minutes < 60) return `${minutes}m ago`;
   if (minutes < 1_440) return `${Math.round(minutes / 60)}h ago`;
   return `${Math.round(minutes / 1_440)}d ago`;
 }
+
+/** Stable no-op subscription: the hydration flag never changes after mount. */
+const neverChanges = () => () => {};
 
 function duration(value: number | null) {
   if (value === null) return "—";
@@ -214,12 +240,33 @@ function activityCopy(event: Snapshot["events"][number]) {
   return `${provider} needs attention`;
 }
 
+/** Tier arrives from the server as a plain string; only Low Relevance is held back. */
+function reviewableTier(tier: string) {
+  return tier !== "Low Relevance";
+}
+
+type Coverage = {
+  employersKnown: number;
+  employersAutoDiscovered: number;
+  boardsEnabled: number;
+  boardsFetched: number;
+  boardsNeedingAttention: number;
+  jobsReachable: number;
+  providersContributing: number;
+  providersRegistered: number;
+  designRoles: number;
+  reviewable: number;
+  candidatesPending: number;
+};
+
 export function DiscoveryWorkspace({
   providers,
+  coverage,
   initialSnapshot,
   recentBatches,
 }: {
   providers: Provider[];
+  coverage: Coverage;
   initialSnapshot: Snapshot | null;
   recentBatches: Batch[];
 }) {
@@ -232,6 +279,11 @@ export function DiscoveryWorkspace({
   const [resultTab, setResultTab] = useState("matched");
   const [filter, setFilter] = useState<"all" | "attention" | "configured">("all");
   const [refreshing, setRefreshing] = useState(false);
+  // False for the server snapshot and the first client render, true thereafter.
+  // useSyncExternalStore is the sanctioned way to express this — it gives React
+  // a distinct server snapshot instead of mutating state from an effect.
+  const mounted = useSyncExternalStore(neverChanges, () => true, () => false);
+  const since = (value: string | null) => relative(value, mounted);
   const running = starting || snapshot?.status === "Running";
   const selected = providers.find((provider) => provider.id === selectedProvider) ?? providers[0];
   const enabledConnectorIds = providers.flatMap((provider) => provider.connectorIds);
@@ -344,7 +396,8 @@ export function DiscoveryWorkspace({
       <header className="discovery-header">
         <div>
           <p className="eyebrow">Opportunity discovery</p>
-          <h1>Discovery Engine</h1>
+          {/* Section heading: the page-level h1 lives in the Discovery route. */}
+          <h2>Discovery Engine</h2>
           <p>Your connected hiring platforms, new opportunities, and strongest matches in one focused workspace.</p>
         </div>
         <div className="discovery-global-actions">
@@ -372,12 +425,60 @@ export function DiscoveryWorkspace({
           <div className={displayedNewJobs ? "summary-new" : ""}><dd>{displayedNewJobs}</dd><dt>New opportunities</dt></div>
           <div><dd>{displayedHealthy}<small> / {configured}</small></dd><dt>Providers healthy</dt></div>
           <div><dd>{displayedIndexedJobs}</dd><dt>Jobs indexed</dt></div>
-          <div><dd className="summary-date">{running ? "Running now" : latest ? relative(latest.startedAt) : "Never"}</dd><dt>Last scan</dt></div>
+          <div><dd className="summary-date">{running ? "Running now" : latest ? since(latest.startedAt) : "Never"}</dd><dt>Last scan</dt></div>
         </dl>
         <div className="discovery-summary-context">
           <span className={attention ? "context-warning" : "context-healthy"}><i />{attention ? `${attention} ${attention === 1 ? "provider needs" : "providers need"} attention` : "All configured providers are ready"}</span>
           <span>{running ? `${snapshot?.completed ?? 0} of ${snapshot?.total ?? 0} complete · ${duration(snapshot?.durationMs ?? 0)}` : latest ? `Last run completed in ${duration(latest.durationMs)}` : "Run your configured providers to begin."}</span>
         </div>
+      </section>
+
+      <section className="discovery-coverage" aria-labelledby="discovery-coverage-title">
+        <header className="discovery-section-heading">
+          <div>
+            <p className="eyebrow">Market reach</p>
+            <h2 id="discovery-coverage-title">Coverage</h2>
+          </div>
+          <span className="coverage-note">
+            {coverage.candidatesPending > 0
+              ? `${coverage.candidatesPending.toLocaleString()} employers queued for board resolution`
+              : "All discovered employers have been resolved"}
+          </span>
+        </header>
+        <dl className="coverage-grid">
+          <div>
+            <dd>{coverage.employersKnown.toLocaleString()}</dd>
+            <dt>Employers known</dt>
+            <small>{coverage.employersAutoDiscovered.toLocaleString()} found automatically</small>
+          </div>
+          <div>
+            <dd>{coverage.boardsFetched.toLocaleString()}<small> / {coverage.boardsEnabled.toLocaleString()}</small></dd>
+            <dt>Boards fetching</dt>
+            <small>{coverage.boardsNeedingAttention
+              ? `${coverage.boardsNeedingAttention} stale or failing`
+              : "None stale"}</small>
+          </div>
+          <div>
+            <dd>{coverage.jobsReachable.toLocaleString()}</dd>
+            <dt>Jobs reachable</dt>
+            <small>across every registered board</small>
+          </div>
+          <div>
+            <dd>{coverage.designRoles.toLocaleString()}</dd>
+            <dt>Design roles found</dt>
+            <small>retrieved and evaluated</small>
+          </div>
+          <div className={coverage.reviewable ? "coverage-highlight" : ""}>
+            <dd>{coverage.reviewable.toLocaleString()}</dd>
+            <dt>Worth reviewing</dt>
+            <small>Stretch and above</small>
+          </div>
+          <div>
+            <dd>{coverage.providersContributing}<small> / {coverage.providersRegistered}</small></dd>
+            <dt>Providers contributing</dt>
+            <small>adapters that returned a role</small>
+          </div>
+        </dl>
       </section>
 
       <section className="today-matches" aria-labelledby="today-matches-title">
@@ -442,7 +543,9 @@ export function DiscoveryWorkspace({
                 </button>
                 <div className="provider-connection-line">
                   <span><i className={provider.enabled ? "is-connected" : ""} />{connectionLabel(provider)}</span>
-                  <small>{provider.configured ? "Configured" : "Setup required"}</small>
+                  <small>{provider.coverage.boardsKnown
+                    ? `${provider.coverage.boardsKnown.toLocaleString()} board${provider.coverage.boardsKnown === 1 ? "" : "s"} · ${provider.coverage.jobsReachable.toLocaleString()} jobs reachable`
+                    : "No boards registered"}</small>
                 </div>
                 {live && running && (
                   <div className={`provider-live-state live-${statusClass(live.state)}`}>
@@ -451,9 +554,10 @@ export function DiscoveryWorkspace({
                   </div>
                 )}
                 <dl className="provider-card-metrics">
-                  <div><dt>Jobs found</dt><dd>{live?.discovered ?? provider.jobsDiscovered}</dd></div>
-                  <div><dt>Strong matches</dt><dd>{provider.results.filter((job) => !job.closedAt && (job.score ?? 0) >= 80).length}</dd></div>
-                  <div><dt>Last scan</dt><dd>{relative(provider.lastScan)}</dd></div>
+                  <div><dt>Boards fetching</dt><dd>{provider.coverage.boardsFetched}<small> / {provider.coverage.boardsKnown}</small></dd></div>
+                  <div><dt>Design roles</dt><dd>{provider.coverage.designRoles}</dd></div>
+                  <div><dt>Worth reviewing</dt><dd>{provider.coverage.reviewable}</dd></div>
+                  <div><dt>Last scan</dt><dd>{since(provider.lastScan)}</dd></div>
                 </dl>
                 {(live?.explanation || provider.lastError) && <p className="provider-last-error"><strong>{live?.errorCode === "RETRY_AFTER" ? "Retry state" : provider.id === "smartrecruiters" ? "Provider policy" : "Last error"}</strong>{live?.explanation ?? providerErrorCopy(provider)}</p>}
                 <div className="provider-card-actions">
@@ -501,9 +605,9 @@ export function DiscoveryWorkspace({
           </div>
           <nav className="provider-detail-tabs" aria-label={`${selected.name} results`} role="tablist">
             {[
-              ["matched", `Strong matches (${selected.results.filter((job) => !job.closedAt && (job.score ?? 0) >= 80).length})`],
+              ["matched", `Worth reviewing (${selected.results.filter((job) => !job.closedAt && reviewableTier(job.tier)).length})`],
               ["new", `New opportunities (${selected.results.filter((job) => !job.closedAt && job.isNew).length})`],
-              ["all", `Other discovered (${selected.results.filter((job) => !job.closedAt && !job.isNew && (job.score ?? 0) < 80).length})`],
+              ["all", `Low relevance (${selected.results.filter((job) => !job.closedAt && !job.isNew && !reviewableTier(job.tier)).length})`],
               ["closed", `Closed (${selected.closed})`],
               ["diagnostics", "Diagnostics"],
               ["history", "History"],
@@ -514,20 +618,20 @@ export function DiscoveryWorkspace({
               <div className="discovery-job-list">
                 {selected.results.filter((job) =>
                   resultTab === "closed" ? !!job.closedAt
-                    : resultTab === "matched" ? !job.closedAt && (job.score ?? 0) >= 80
+                    : resultTab === "matched" ? !job.closedAt && reviewableTier(job.tier)
                       : resultTab === "new" ? !job.closedAt && job.isNew
-                        : !job.closedAt && !job.isNew && (job.score ?? 0) < 80).map((job) => (
+                        : !job.closedAt && !job.isNew && !reviewableTier(job.tier)).map((job) => (
                   <Link href={`/jobs/${job.id}`} key={job.id}>
                     <span><strong>{job.title}</strong><small>{job.company} · {job.location || "Location not provided"}</small></span>
-                    <span>{job.closedAt ? "Closed" : job.score === null ? "Not scored" : `${job.score} match`}<small>Seen {relative(job.lastSeenAt)}</small></span>
+                    <span>{job.closedAt ? "Closed" : job.score === null ? "Not scored" : `${job.tier} · ${job.score}`}<small>Seen {since(job.lastSeenAt)}</small></span>
                     <b>Open →</b>
                   </Link>
                 ))}
                 {!selected.results.filter((job) =>
                   resultTab === "closed" ? !!job.closedAt
-                    : resultTab === "matched" ? !job.closedAt && (job.score ?? 0) >= 80
+                    : resultTab === "matched" ? !job.closedAt && reviewableTier(job.tier)
                       : resultTab === "new" ? !job.closedAt && job.isNew
-                        : !job.closedAt && !job.isNew && (job.score ?? 0) < 80).length && (
+                        : !job.closedAt && !job.isNew && !reviewableTier(job.tier)).length && (
                   <DiscoveryEmpty
                     title={resultTab === "closed" ? "No closed jobs" : resultTab === "new" ? "No new opportunities" : resultTab === "matched" ? "No strong matches yet" : "No other jobs to review"}
                     message={selected.configured ? "Run this provider again to check for changes. A healthy scan can complete without finding a match." : "Configure at least one company source, then scan this provider to populate results."}
@@ -580,7 +684,7 @@ export function DiscoveryWorkspace({
         <div className="discovery-activity-log">
           <header className="discovery-section-heading"><div><p className="eyebrow">Activity log</p><h2>Latest provider events</h2></div></header>
           {(snapshot?.events ?? []).slice(-8).reverse().map((event) => (
-            <article key={event.id}><i className={`activity-${event.tone}`} /><span><strong>{activityCopy(event)}</strong><small>{event.company}</small><p>{event.result}</p></span><time>{relative(event.timestamp)}</time></article>
+            <article key={event.id}><i className={`activity-${event.tone}`} /><span><strong>{activityCopy(event)}</strong><small>{event.company}</small><p>{event.result}</p></span><time>{since(event.timestamp)}</time></article>
           ))}
           {!snapshot?.events.length && <DiscoveryEmpty title="No activity yet" message="Live provider events will appear here when a scan begins." />}
         </div>

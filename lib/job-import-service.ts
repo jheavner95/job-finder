@@ -1,12 +1,14 @@
 import { JobStatus, type PrismaClient } from "@prisma/client";
 
 import type { JobImportPreview } from "./job-import";
+import { type OpportunityTier, tierForScore } from "./opportunity-tiers";
 
 export type ImportJobResult = {
   jobId: string;
   duplicate: boolean;
   score: number;
   confidence: number;
+  tier: OpportunityTier;
 };
 
 export async function findDuplicateJob(
@@ -24,6 +26,9 @@ export async function importJobPreview(
   preview: JobImportPreview,
 ): Promise<ImportJobResult> {
   const { normalized, evaluation } = preview;
+  // Recomputed on every import, including duplicates, so a re-import always
+  // lands on the tier its current score deserves.
+  const tier = tierForScore(evaluation.score);
 
   return database.$transaction(async (transaction) => {
     const source = await transaction.jobSource.upsert({
@@ -163,6 +168,7 @@ export async function importJobPreview(
           summary: evaluation.summary,
           confidence: evaluation.confidence,
           eligibility: evaluation.eligibility,
+          tier,
           importMethod: "manual-deterministic",
         },
         categoryResults: evaluation.categories,
@@ -173,8 +179,8 @@ export async function importJobPreview(
       data: {
         jobId,
         type: "job_rescored",
-        summary: `Deterministic evaluation completed with a score of ${evaluation.score}.`,
-        metadata: { scoringVersion: "deterministic-v1", score: evaluation.score },
+        summary: `Deterministic evaluation completed with a score of ${evaluation.score} (${tier}).`,
+        metadata: { scoringVersion: "deterministic-v1", score: evaluation.score, tier },
       },
     });
 
@@ -183,6 +189,7 @@ export async function importJobPreview(
       duplicate: Boolean(duplicate),
       score: evaluation.score,
       confidence: evaluation.confidence,
+      tier,
     };
   });
 }

@@ -1,30 +1,17 @@
-import { copyFileSync, unlinkSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
-import { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   reconcileCompleteFeed,
   reconcileExplicitDeletion,
 } from "../lib/job-sources/services/feed-reconciliation";
+import { createTestDatabase, releaseTestDatabases } from "./test-database";
 
-const databases: Array<{ client: PrismaClient; path: string }> = [];
+const database = () => createTestDatabase({ label: "reconciliation" });
 
-function database() {
-  const path = `/tmp/job-search-intelligence-reconciliation-${randomUUID()}.db`;
-  copyFileSync("prisma/dev.db", path);
-  const client = new PrismaClient({ datasourceUrl: `file:${path}` });
-  databases.push({ client, path });
-  return client;
-}
-
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map(async ({ client, path }) => {
-    await client.$disconnect();
-    unlinkSync(path);
-  }));
-});
+afterEach(releaseTestDatabases);
 
 async function seed(db: PrismaClient) {
   const suffix = randomUUID();
@@ -46,7 +33,7 @@ async function seed(db: PrismaClient) {
 
 describe("complete-feed reconciliation", () => {
   it("updates observed jobs and closes only IDs absent from a successful complete feed", async () => {
-    const db = database();
+    const db = await database();
     const { source, company } = await seed(db);
     const observedAt = new Date("2026-07-27T12:00:00Z");
     await expect(reconcileCompleteFeed(db, {
@@ -71,7 +58,7 @@ describe("complete-feed reconciliation", () => {
   });
 
   it("records explicit provider deletion separately and auditably", async () => {
-    const db = database();
+    const db = await database();
     const { source, company } = await seed(db);
     const observedAt = new Date("2026-07-27T13:00:00Z");
     await expect(reconcileExplicitDeletion(db, {

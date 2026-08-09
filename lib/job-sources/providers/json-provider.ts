@@ -18,6 +18,7 @@ import {
   validateProviderRecords,
 } from "./provider-utils";
 import { getOperationalCapability } from "../capabilities";
+import { evaluateRoleRelevance } from "../role-relevance";
 
 export type GenericPosting = {
   id: string;
@@ -66,8 +67,11 @@ export abstract class JsonJobProvider implements JobSourceProvider {
       excludedJobs: [] as import("../types").ExcludedJobDiagnostic[],
     };
     const jobs = allJobs.flatMap((job): DiscoveredJob[] => {
-      const titleMatch = !criteria.titles.length
-        || criteria.titles.some((value) => job.title.toLowerCase().includes(value.toLowerCase()));
+      // `criteria.titles` is a ranking input, not a retrieval filter: matching
+      // raw title strings discarded broad matches such as "Product Designer"
+      // whenever a narrower saved variant was configured.
+      const relevance = evaluateRoleRelevance(job.title);
+      const titleMatch = relevance.relevant;
       const locationMatch = !criteria.locations.length
         || criteria.locations.some((value) => job.location.toLowerCase().includes(value.toLowerCase()));
       if (titleMatch) diagnostics.titleMatches += 1;
@@ -81,10 +85,10 @@ export abstract class JsonJobProvider implements JobSourceProvider {
           title: job.title,
           canonicalUrl: job.url,
           reason,
-          matchedTitleTerms: titleMatch ? criteria.titles : [],
-          excludedTitleTerms: titleMatch ? [] : criteria.titles,
+          matchedTitleTerms: relevance.signals,
+          excludedTitleTerms: relevance.rejectedBy ? [relevance.rejectedBy] : [],
           detail: reason === "title"
-            ? `Title did not match: ${criteria.titles.join(", ")}.`
+            ? relevance.detail
             : `Location did not match: ${criteria.locations.join(", ")}.`,
         });
         return [];

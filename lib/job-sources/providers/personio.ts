@@ -21,6 +21,7 @@ import {
 } from "../types";
 import { configuredHealth, stringValue } from "./provider-utils";
 import { executeProviderRequest } from "../request-policy";
+import { evaluateRoleRelevance } from "../role-relevance";
 
 type PersonioDescription = { name?: unknown; value?: unknown };
 
@@ -140,8 +141,10 @@ function analyze(position: PersonioPosition, criteria: JobSearchCriteria) {
   const location = stringValue(position.office);
   const type = employment(position);
   const content = descriptions(position).map((item) => item.value).join("\n");
-  const titleMatch = !criteria.titles.length
-    || criteria.titles.some((term) => title.toLowerCase().includes(term.toLowerCase()));
+  const relevance = evaluateRoleRelevance(title, {
+    department: stringValue(position.department),
+  });
+  const titleMatch = relevance.relevant;
   const locationMatch = !criteria.locations.length
     || criteria.locations.some((term) => location.toLowerCase().includes(term.toLowerCase()));
   const employmentMatch = !criteria.employmentTypes?.length
@@ -154,7 +157,7 @@ function analyze(position: PersonioPosition, criteria: JobSearchCriteria) {
       : !employmentMatch ? "employment_type"
         : hardTerm ? "hard_exclusion"
             : null;
-  return { titleMatch, locationMatch, reason, hardTerm };
+  return { titleMatch, locationMatch, reason, hardTerm, relevance };
 }
 
 async function download(client: FetchClient, context: ProviderContext) {
@@ -209,9 +212,9 @@ export class PersonioProvider implements JobSourceProvider {
           title,
           canonicalUrl: canonicalUrl(context, id),
           reason: result.reason,
-          matchedTitleTerms: result.titleMatch ? criteria.titles : [],
-          excludedTitleTerms: result.titleMatch ? [] : criteria.titles,
-          detail: result.reason === "title" ? `Title did not match: ${criteria.titles.join(", ")}.`
+          matchedTitleTerms: result.relevance.signals,
+          excludedTitleTerms: result.relevance.rejectedBy ? [result.relevance.rejectedBy] : [],
+          detail: result.reason === "title" ? result.relevance.detail
             : result.reason === "location" ? `Office did not match: ${criteria.locations.join(", ")}.`
               : result.reason === "employment_type" ? `Employment type did not match: ${criteria.employmentTypes?.join(", ")}.`
                 : `Posting contained hard exclusion "${result.hardTerm}".`,

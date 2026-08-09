@@ -8,9 +8,11 @@ import {
 import type {
   CanonicalJobPosting,
   DiscoveredJob,
+  DiscoveryDiagnostics,
   JobSearchCriteria,
   ProviderContext,
 } from "../types";
+import { evaluateRoleRelevance } from "../role-relevance";
 import {
   configuredHealth,
   connectorToken,
@@ -48,13 +50,18 @@ function locationFor(offer: RecruiteeOffer) {
   return [offer.remote ? "Remote" : "", offer.location, ...structured].filter(Boolean).join(" · ");
 }
 
-function matches(offer: RecruiteeOffer, criteria: JobSearchCriteria) {
-  const title = stringValue(offer.title).toLowerCase();
+function analyze(offer: RecruiteeOffer, criteria: JobSearchCriteria) {
+  const relevance = evaluateRoleRelevance(stringValue(offer.title));
   const location = locationFor(offer).toLowerCase();
-  return (!criteria.titles.length || criteria.titles.some((term) =>
-    title.includes(term.toLowerCase())))
-    && (!criteria.locations.length || criteria.locations.some((term) =>
-      location.includes(term.toLowerCase())));
+  const locationMatch = !criteria.locations.length
+    || criteria.locations.some((term) => location.includes(term.toLowerCase()));
+  return {
+    relevance,
+    locationMatch,
+    reason: !relevance.relevant ? "title" as const
+      : !locationMatch ? "location" as const
+        : null,
+  };
 }
 
 export class RecruiteeProvider implements JobSourceProvider {
@@ -82,31 +89,56 @@ export class RecruiteeProvider implements JobSourceProvider {
       url: stringValue(offer.careers_url)
         || `https://${company}.recruitee.com/o/${encodeURIComponent(String(offer.slug ?? ""))}`,
     })));
-    const jobs = allOffers.filter((offer) => matches(offer, criteria)).map(
-      (offer): DiscoveredJob => ({
+    const diagnostics: DiscoveryDiagnostics = {
+      totalJobsDiscovered: allOffers.length,
+      titleMatches: 0,
+      locationMatches: 0,
+      excludedByTitle: 0,
+      excludedByLocation: 0,
+      excludedByEmploymentType: 0,
+      excludedByHardExclusions: 0,
+      closedJobs: 0,
+      excludedJobs: [],
+    };
+    const jobs: DiscoveredJob[] = [];
+    for (const offer of allOffers) {
+      const externalId = String(offer.slug ?? offer.id ?? "");
+      const canonicalUrl = stringValue(offer.careers_url)
+        || `https://${company}.recruitee.com/o/${encodeURIComponent(String(offer.slug ?? ""))}`;
+      const result = analyze(offer, criteria);
+      if (result.relevance.relevant) diagnostics.titleMatches += 1;
+      if (result.relevance.relevant && result.locationMatch) diagnostics.locationMatches += 1;
+      if (result.reason) {
+        if (result.reason === "title") diagnostics.excludedByTitle += 1;
+        else diagnostics.excludedByLocation += 1;
+        // Every excluded posting must be traceable or the run's disposition
+        // ledger cannot reconcile.
+        diagnostics.excludedJobs.push({
+          externalId,
+          title: stringValue(offer.title) || "(untitled)",
+          canonicalUrl,
+          reason: result.reason,
+          matchedTitleTerms: result.relevance.signals,
+          excludedTitleTerms: result.relevance.rejectedBy ? [result.relevance.rejectedBy] : [],
+          detail: result.reason === "title"
+            ? result.relevance.detail
+            : `Location did not match: ${criteria.locations.join(", ")}.`,
+        });
+        continue;
+      }
+      jobs.push({
         providerId: this.id,
-        externalId: String(offer.slug ?? offer.id ?? ""),
+        externalId,
         title: stringValue(offer.title),
         company: context.company,
         location: locationFor(offer),
-        canonicalUrl: stringValue(offer.careers_url)
-          || `https://${company}.recruitee.com/o/${encodeURIComponent(String(offer.slug ?? ""))}`,
+        canonicalUrl,
         discoveredVia: "canonical",
-      }),
-    );
+      });
+    }
     return {
       jobs,
-      diagnostics: {
-        totalJobsDiscovered: allOffers.length,
-        titleMatches: jobs.length,
-        locationMatches: jobs.length,
-        excludedByTitle: allOffers.length - jobs.length,
-        excludedByLocation: 0,
-        excludedByEmploymentType: 0,
-        excludedByHardExclusions: 0,
-        closedJobs: 0,
-        excludedJobs: [],
-      },
+      diagnostics,
       feed: {
         complete: true,
         sourceJobIds: allOffers

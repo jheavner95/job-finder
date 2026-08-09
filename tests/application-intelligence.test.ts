@@ -1,7 +1,5 @@
-import { copyFileSync, unlinkSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
-import { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -13,15 +11,9 @@ import {
   nextApplicationStage,
   validApplicationTransition,
 } from "../lib/application-intelligence";
+import { createTestDatabase, releaseTestDatabases } from "./test-database";
 
-const databases: Array<{ client: PrismaClient; path: string }> = [];
-
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map(async ({ client, path }) => {
-    await client.$disconnect();
-    unlinkSync(path);
-  }));
-});
+afterEach(releaseTestDatabases);
 
 describe("application lifecycle", () => {
   it("maps every supported stage into the CRM pipeline", () => {
@@ -64,13 +56,22 @@ describe("application lifecycle", () => {
   });
 
   it("preserves opportunity data, status history, timeline, documents, interviews, and reminders", async () => {
-    const path = `/tmp/job-search-intelligence-aip-${randomUUID()}.db`;
-    copyFileSync("prisma/dev.db", path);
-    const database = new PrismaClient({ datasourceUrl: `file:${path}` });
-    databases.push({ client: database, path });
+    const database = await createTestDatabase({ label: "application-intelligence" });
 
-    const job = await database.job.findFirstOrThrow({ include: { company: true, source: true } });
-    await database.application.deleteMany({ where: { jobId: job.id } });
+    const suffix = randomUUID();
+    const job = await database.job.create({
+      data: {
+        fingerprint: `application-${suffix}`,
+        sourceJobId: suffix,
+        title: "Staff Product Designer",
+        location: "Remote — United States",
+        sourceUrl: `https://example.test/jobs/${suffix}`,
+        originalSourceText: "Lead enterprise product design.",
+        company: { create: { name: `Application company ${suffix}` } },
+        source: { create: { name: `Application source ${suffix}` } },
+      },
+      include: { company: true, source: true },
+    });
     const originalTitle = job.title;
     const application = await database.application.create({
       data: {

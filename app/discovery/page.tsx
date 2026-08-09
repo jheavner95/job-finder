@@ -1,10 +1,14 @@
+import { PageHeader } from "@/app/components/PageHeader";
 import { WorkspaceLayout } from "@/app/components/PageLayout";
 import { prisma } from "@/lib/db";
 import { PROVIDER_CAPABILITIES } from "@/lib/job-sources/capabilities";
 import { jobSourceRegistry } from "@/lib/job-sources/registry";
+import { isReviewable, resolveTier } from "@/lib/opportunity-tiers";
+import { listTargetEmployers } from "@/lib/job-sources/services/employer-discovery";
 import { getScanSnapshot } from "@/lib/scan-presentation";
 
 import { DiscoveryWorkspace } from "./DiscoveryWorkspace";
+import { TargetEmployers } from "./TargetEmployers";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +55,8 @@ export default async function DiscoveryPage() {
       take: 12,
     }),
     getScanSnapshot(prisma),
+    // No cap. A cap here silently hid the oldest-seen jobs from every Discovery
+    // bucket and every Discovery count once the database grew.
     prisma.job.findMany({
       where: { isSynthetic: false },
       include: {
@@ -59,7 +65,6 @@ export default async function DiscoveryPage() {
         evaluations: { orderBy: { evaluatedAt: "desc" }, take: 1 },
       },
       orderBy: { lastSeenAt: "desc" },
-      take: 160,
     }),
   ]);
   const providerNames = new Map(
@@ -101,6 +106,27 @@ export default async function DiscoveryPage() {
     const providerName = providerNames.get(capability.id) ?? capability.name;
     const providerJobs = jobs.filter((job) =>
       job.source.name.toLowerCase() === providerName.toLowerCase());
+    // Effective coverage, not nominal support: how many employer boards this
+    // provider actually reaches and what they actually yield.
+    const coverage = {
+      boardsKnown: providerConnectors.length,
+      boardsValidated: providerConnectors.filter((connector) =>
+        connector.validationStatus === "Validated").length,
+      boardsFetched: providerConnectors.filter((connector) =>
+        connector.lastSuccessfulFetch).length,
+      boardsStale: providerConnectors.filter((connector) =>
+        connector.validationStatus === "Stale" || connector.validationStatus === "Failed").length,
+      jobsReachable: providerConnectors.reduce((sum, connector) =>
+        sum + connector.jobsAvailable, 0),
+      designRoles: providerJobs.filter((job) => !job.closedAt).length,
+      reviewable: providerJobs.filter((job) => !job.closedAt
+        && isReviewable(resolveTier(
+          job.evaluations[0]?.score ?? 0,
+          job.evaluations[0]?.reasoning,
+        ))).length,
+      autoDiscovered: providerConnectors.filter((connector) =>
+        connector.discoverySource.startsWith("auto:")).length,
+    };
     const exclusions = runs.flatMap((run) => excludedJobs(run.metadata).map((item) => ({
       externalId: String(item.externalId ?? ""),
       title: String(item.title ?? "Untitled posting"),
@@ -123,6 +149,7 @@ export default async function DiscoveryPage() {
       enabled: enabled.length,
       connectorIds: enabled.map((connector) => connector.id),
       companiesIndexed: providerConnectors.length,
+      coverage,
       lastScan: dateValue(latest?.completedAt ?? latest?.startedAt),
       nextScan: dateValue(nextRun),
       jobsDiscovered: latestDiscovered,
@@ -156,6 +183,7 @@ export default async function DiscoveryPage() {
         company: job.company.name,
         location: job.location,
         score: job.evaluations[0]?.score ?? null,
+        tier: resolveTier(job.evaluations[0]?.score ?? 0, job.evaluations[0]?.reasoning),
         isNew: latest ? job.createdAt >= latest.startedAt : false,
         closedAt: dateValue(job.closedAt),
         lastSeenAt: dateValue(job.lastSeenAt),
@@ -185,10 +213,37 @@ export default async function DiscoveryPage() {
     };
   });
 
+  const openJobs = jobs.filter((job) => !job.closedAt);
+  const coverage = {
+    employersKnown: connectors.length,
+    employersAutoDiscovered: connectors.filter((connector) =>
+      connector.discoverySource.startsWith("auto:")).length,
+    boardsEnabled: connectors.filter((connector) => connector.enabled).length,
+    boardsFetched: connectors.filter((connector) => connector.lastSuccessfulFetch).length,
+    boardsNeedingAttention: connectors.filter((connector) =>
+      connector.validationStatus === "Stale" || connector.validationStatus === "Failed").length,
+    jobsReachable: connectors.reduce((sum, connector) => sum + connector.jobsAvailable, 0),
+    providersContributing: providers.filter((provider) => provider.coverage.designRoles > 0).length,
+    providersRegistered: providerNames.size,
+    designRoles: openJobs.length,
+    reviewable: openJobs.filter((job) => isReviewable(resolveTier(
+      job.evaluations[0]?.score ?? 0,
+      job.evaluations[0]?.reasoning,
+    ))).length,
+    candidatesPending: await prisma.employerCandidate.count({ where: { status: "Pending" } }),
+  };
+  const targetEmployers = await listTargetEmployers(prisma);
+
   return (
     <WorkspaceLayout className="discovery-workspace-page">
+      <PageHeader
+        title="Discovery"
+        subtitle="Choose employers to watch, then scan their public job boards for product-design roles."
+      />
+      <TargetEmployers employers={targetEmployers} />
       <DiscoveryWorkspace
         providers={providers}
+        coverage={coverage}
         initialSnapshot={snapshot}
         recentBatches={batches.map((batch) => ({
           id: batch.id,

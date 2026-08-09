@@ -1,7 +1,3 @@
-import { copyFileSync, unlinkSync } from "node:fs";
-import { randomUUID } from "node:crypto";
-
-import { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getOperationalCapability } from "../lib/job-sources/capabilities";
@@ -18,6 +14,7 @@ import {
   jobvitePage,
   jobviteSecondJob,
 } from "./fixtures/jobvite";
+import { createTestDatabase, releaseTestDatabases } from "./test-database";
 
 const connectorId = "jobvite-test";
 const configuration = {
@@ -36,22 +33,9 @@ const context: ProviderContext = {
   feedPath: "/jobvite/jobs",
   feedVersion: "jobvite-v2",
 };
-const databases: Array<{ client: PrismaClient; path: string }> = [];
+const database = () => createTestDatabase({ label: "jobvite" });
 
-function database() {
-  const path = `/tmp/job-search-intelligence-jobvite-${randomUUID()}.db`;
-  copyFileSync("prisma/dev.db", path);
-  const client = new PrismaClient({ datasourceUrl: `file:${path}` });
-  databases.push({ client, path });
-  return client;
-}
-
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map(async ({ client, path }) => {
-    await client.$disconnect();
-    unlinkSync(path);
-  }));
-});
+afterEach(releaseTestDatabases);
 
 function response(value: unknown, status = 200, headers?: HeadersInit) {
   return Promise.resolve(new Response(JSON.stringify(value), {
@@ -176,7 +160,7 @@ describe("Jobvite employer feed connector", () => {
   });
 
   it("onboards only after feed and robots certification, then removes safely", async () => {
-    const db = database();
+    const db = await database();
     await db.companyConnector.create({
       data: {
         id: connectorId,
@@ -215,7 +199,7 @@ describe("Jobvite employer feed connector", () => {
   });
 
   it("fails closed on robots denial without replacing the previous feed", async () => {
-    const db = database();
+    const db = await database();
     await db.companyConnector.create({
       data: {
         id: connectorId,

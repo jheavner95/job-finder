@@ -355,6 +355,15 @@ model CompanyConnector {
   feedOrigin          String?
   feedPath            String?
   feedVersion         String?
+  // Provenance and coverage accounting for boards the employer discovery layer
+  // registered automatically. Manual entries keep the defaults.
+  discoverySource     String   @default("manual")
+  discoveryConfidence Int      @default(100)
+  validationStatus    String   @default("Unvalidated")
+  jobsAvailable       Int      @default(0)
+  relevantRoles       Int      @default(0)
+  lastValidatedAt     DateTime?
+  boardFingerprint    String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   crawlRuns           ConnectorCrawl[]
@@ -363,6 +372,31 @@ model CompanyConnector {
   @@index([atsType, enabled])
   @@unique([atsType, connectorKey])
   @@index([health])
+  @@index([discoverySource])
+  @@index([validationStatus])
+}
+
+/// A company name observed from a compliant public source, awaiting resolution
+/// to a public ATS board. This is the working set of the employer discovery
+/// layer; resolved rows point at the CompanyConnector they produced.
+model EmployerCandidate {
+  id               String   @id @default(cuid())
+  name             String
+  normalizedName   String   @unique
+  source           String
+  status           String   @default("Pending")
+  attempts         Int      @default(0)
+  probesUsed       Int      @default(0)
+  lastAttemptAt    DateTime?
+  resolvedProvider String?
+  resolvedKey      String?
+  connectorId      String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([status, lastAttemptAt])
+  @@index([source])
 }
 
 model GreenhouseComparisonItem {

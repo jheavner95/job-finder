@@ -1,32 +1,19 @@
-import { copyFileSync, unlinkSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
-import { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WorkableProvider } from "../lib/job-sources/providers/workable";
 import { GreenhouseProvider } from "../lib/job-sources/providers/greenhouse";
 import { WorkdayProvider } from "../lib/job-sources/providers/workday";
+import { AshbyProvider } from "../lib/job-sources/providers/ashby";
 import { JobSourceRegistry } from "../lib/job-sources/registry";
 import { ProviderDiscoveryRunner } from "../lib/job-sources/services/provider-discovery";
 import { DiscoveryScheduler } from "../lib/scheduling/discovery-scheduler";
+import { createTestDatabase, releaseTestDatabases } from "./test-database";
 
-const databases: Array<{ client: PrismaClient; path: string }> = [];
+const testDatabase = () => createTestDatabase({ label: "provider-discovery" });
 
-function testDatabase() {
-  const path = `/tmp/job-search-intelligence-${randomUUID()}.db`;
-  copyFileSync("prisma/dev.db", path);
-  const client = new PrismaClient({ datasourceUrl: `file:${path}` });
-  databases.push({ client, path });
-  return client;
-}
-
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map(async ({ client, path }) => {
-    await client.$disconnect();
-    unlinkSync(path);
-  }));
-});
+afterEach(releaseTestDatabases);
 
 describe("provider discovery persistence", () => {
   it.each([
@@ -42,7 +29,7 @@ describe("provider discovery persistence", () => {
   ])(
     "validates %s robots policy against the exact employer feed path",
     async (providerId, connectorKey, careerUrl, robotsUrl, feedPath) => {
-      const database = testDatabase();
+      const database = await testDatabase();
       const connector = await database.companyConnector.create({
         data: {
           company: `${providerId} robots ${randomUUID()}`,
@@ -80,7 +67,7 @@ describe("provider discovery persistence", () => {
   );
 
   it("fails closed with a typed diagnosis when a robots policy endpoint rejects validation", async () => {
-    const database = testDatabase();
+    const database = await testDatabase();
     const connector = await database.companyConnector.create({
       data: {
         company: `Ashby policy ${randomUUID()}`,
@@ -90,8 +77,11 @@ describe("provider discovery persistence", () => {
         enabled: true,
       },
     });
+    // 5xx, not 4xx: Ashby declares the RFC 9309 "unavailable" reading for
+    // 400-499 against its documented public API, so a 401 is now permitted.
+    // A server error still means the policy is undefined and must fail closed.
     const client = vi.fn<typeof fetch>(async () =>
-      new Response("Unauthorized", { status: 401 }));
+      new Response("Service Unavailable", { status: 503 }));
     await expect(new ProviderDiscoveryRunner(
       database,
       "ashby",
@@ -105,17 +95,72 @@ describe("provider discovery persistence", () => {
       status: "Blocked",
       errorCode: "UNEXPECTED_RESPONSE",
       providerMessage:
-        "The provider robots policy could not be verified because the policy endpoint returned HTTP 401. Discovery failed closed.",
+        "The provider robots policy could not be verified because the policy endpoint returned HTTP 503. Discovery failed closed.",
       diagnosticContext: {
         robotsUrl: "https://api.ashbyhq.com/robots.txt",
         path: "/posting-api/job-board/example",
-        status: 401,
+        status: 503,
       },
     });
   });
 
+  it("reaches Ashby's documented public API when robots.txt returns 401", async () => {
+    const database = await testDatabase();
+    const connector = await database.companyConnector.create({
+      data: {
+        company: `Ashby 401 policy ${randomUUID()}`,
+        careerUrl: "https://jobs.ashbyhq.com/example",
+        atsType: "ashby",
+        connectorKey: "example",
+        enabled: true,
+      },
+    });
+    const posting = {
+      id: "ASHBY-401",
+      title: "Senior Product Designer",
+      location: "Remote, USA",
+      jobUrl: "https://jobs.ashbyhq.com/example/ASHBY-401",
+      descriptionPlain: "Own end-to-end product design for the platform.",
+      employmentType: "FullTime",
+      isListed: true,
+    };
+    const requested: string[] = [];
+    const client = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      requested.push(url);
+      // The policy host refuses even its own robots.txt.
+      if (url.endsWith("/robots.txt")) return new Response("Unauthorized", { status: 401 });
+      return new Response(JSON.stringify({ jobs: [posting] }), { status: 200 });
+    });
+
+    // The provider must share the mocked client, otherwise it falls back to the
+    // global registry's real `fetch` and issues a live request.
+    const registry = new JobSourceRegistry().register(new AshbyProvider(client));
+    await expect(new ProviderDiscoveryRunner(
+      database,
+      "ashby",
+      client,
+      registry,
+      { connectorIds: [connector.id] },
+    ).run()).resolves.toMatchObject({ failures: 0, jobsDiscovered: 1, jobsImported: 1 });
+
+    const crawl = await database.connectorCrawl.findFirstOrThrow({
+      where: { connectorId: connector.id },
+    });
+    expect(crawl.status).toBe("Completed");
+    expect(crawl.errorCode).toBeNull();
+    // The applied policy is persisted for diagnostics.
+    expect((crawl.metadata as { robotsPolicy?: string }).robotsPolicy).toBe("unavailable-4xx");
+    // Only the documented public posting API was called.
+    expect(requested.some((url) =>
+      url.startsWith("https://api.ashbyhq.com/posting-api/job-board/example"))).toBe(true);
+    expect(requested.every((url) =>
+      url.endsWith("/robots.txt")
+      || url.startsWith("https://api.ashbyhq.com/posting-api/"))).toBe(true);
+  });
+
   it("runs multiple enabled Greenhouse boards in one discovery batch", async () => {
-    const database = testDatabase();
+    const database = await testDatabase();
     const suffix = randomUUID();
     const connectors = await Promise.all(["alpha", "beta"].map((token) =>
       database.companyConnector.create({
@@ -207,7 +252,7 @@ describe("provider discovery persistence", () => {
   });
 
   it("cancels an independently running batch and preserves work already in flight", async () => {
-    const database = testDatabase();
+    const database = await testDatabase();
     const suffix = randomUUID();
     const connectors = await Promise.all(["cancel-alpha", "cancel-beta"].map((token) =>
       database.companyConnector.create({
@@ -270,7 +315,7 @@ describe("provider discovery persistence", () => {
   });
 
   it("imports Workable once, prevents a repeat duplicate, and records crawl activity", async () => {
-    const database = testDatabase();
+    const database = await testDatabase();
     const company = `Workable Verification ${randomUUID()}`;
     const connector = await database.companyConnector.create({
       data: {
@@ -410,7 +455,7 @@ describe("provider discovery persistence", () => {
   });
 
   it("runs manual then scheduled multi-provider discovery with isolation and repeat deduplication", async () => {
-    const database = testDatabase();
+    const database = await testDatabase();
     const suffix = randomUUID();
     const due = new Date(Date.now() - 60_000);
     const workable = await database.companyConnector.create({
@@ -617,7 +662,7 @@ describe("provider discovery persistence", () => {
   });
 
   it("prevents concurrent scheduler execution with a persisted lease", async () => {
-    const database = testDatabase();
+    const database = await testDatabase();
     await database.schedulerLock.upsert({
       where: { id: "discovery-scheduler" },
       create: {
@@ -643,7 +688,7 @@ describe("provider discovery persistence", () => {
   });
 
   it("stops Workday with a persisted Warning and exact public-access reason", async () => {
-    const database = testDatabase();
+    const database = await testDatabase();
     const connector = await database.companyConnector.create({
       data: {
         company: `Workday Verification ${randomUUID()}`,

@@ -2,46 +2,50 @@ import { JobRow } from "@/app/components/JobRow";
 import { WorkspaceLayout } from "@/app/components/PageLayout";
 import { PageHeader } from "@/app/components/PageHeader";
 import { getJobs } from "@/lib/queries";
-import type { JobStatus } from "@/lib/types";
+import { OPPORTUNITY_TIERS, isReviewable, type OpportunityTier } from "@/lib/opportunity-tiers";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-const filters = ["All jobs", "Strong Match", "Possible", "Rejected"] as const;
+// The queue is organised by how good the fit is, not by a decision the user has
+// not made yet. Low Relevance is reachable but never the default view.
+const filters = ["Reviewable", ...OPPORTUNITY_TIERS] as const;
 type Filter = (typeof filters)[number];
 
 export default async function ReviewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string }>;
+  searchParams: Promise<{ tier?: string; status?: string; q?: string }>;
 }) {
   const params = await searchParams;
-  const selected: Filter = filters.includes(params.status as Filter)
-    ? (params.status as Filter)
-    : "All jobs";
+  const requested = params.tier ?? params.status;
+  const selected: Filter = filters.includes(requested as Filter)
+    ? (requested as Filter)
+    : "Reviewable";
   const query = params.q?.trim().toLowerCase() ?? "";
   const jobs = await getJobs();
-  const filtered = jobs.filter((job) => {
-    const statusMatch = selected === "All jobs" || job.status === selected as JobStatus;
-    const queryMatch = `${job.title} ${job.company} ${job.location}`
-      .toLowerCase()
-      .includes(query);
-    return statusMatch && queryMatch;
-  });
+
+  const inFilter = (tier: OpportunityTier, filter: Filter) =>
+    filter === "Reviewable" ? isReviewable(tier) : tier === filter;
+
+  const filtered = jobs.filter((job) =>
+    inFilter(job.tier, selected)
+    && `${job.title} ${job.company} ${job.location}`.toLowerCase().includes(query));
+  const reviewable = jobs.filter((job) => isReviewable(job.tier)).length;
 
   return (
     <WorkspaceLayout>
       <PageHeader
         title="Review queue"
-        subtitle="Imported opportunities compared with your saved career profile."
+        subtitle="Imported opportunities ranked against your saved career profile."
       />
       <div className="queue-tools">
-        <div className="filter-tabs" role="group" aria-label="Filter jobs by status">
+        <div className="filter-tabs" role="group" aria-label="Filter opportunities by fit">
           {filters.map((filter) => {
-            const count = filter === "All jobs"
-              ? jobs.length
-              : jobs.filter((job) => job.status === filter).length;
-            const href = filter === "All jobs" ? "/review" : `/review?status=${encodeURIComponent(filter)}`;
+            const count = jobs.filter((job) => inFilter(job.tier, filter)).length;
+            const href = filter === "Reviewable"
+              ? "/review"
+              : `/review?tier=${encodeURIComponent(filter)}`;
             return (
               <a key={filter} href={href} className={selected === filter ? "selected" : ""} aria-current={selected === filter ? "page" : undefined}>
                 {filter}<span>{count}</span>
@@ -50,23 +54,27 @@ export default async function ReviewPage({
           })}
         </div>
         <form className="search" action="/review">
-          {selected !== "All jobs" && <input type="hidden" name="status" value={selected} />}
+          {selected !== "Reviewable" && <input type="hidden" name="tier" value={selected} />}
           <span aria-hidden="true">⌕</span>
-          <label className="sr-only" htmlFor="job-search">Search jobs</label>
+          <label className="sr-only" htmlFor="job-search">Search opportunities</label>
           <input id="job-search" name="q" defaultValue={params.q} placeholder="Search title, company, location" />
           <button type="submit">Search</button>
         </form>
       </div>
       <div className="queue-summary" aria-live="polite">
-        <span><b>{filtered.length}</b> of {jobs.length} opportunities</span>
-        <span>Sorted by match score <b>↓</b></span>
+        <span><b>{filtered.length}</b> of {reviewable} worth reviewing<small> · {jobs.length} discovered</small></span>
+        <span>Sorted by fit <b>↓</b></span>
       </div>
       {filtered.length ? (
         <div className="job-list all-jobs">
           {filtered.map((job) => <JobRow key={job.id} job={job} />)}
         </div>
       ) : (
-        <div className="empty-state"><strong>{jobs.length ? "No jobs found" : "No opportunities are waiting for review."}</strong><p>{jobs.length ? "Try a broader filter or search term." : "Newly imported opportunities will appear here."}</p>{!jobs.length && <Link className="primary-button button-link" href="/scan">Scan Jobs</Link>}</div>
+        <div className="empty-state">
+          <strong>{jobs.length ? "No opportunities match this filter" : "No opportunities are waiting for review."}</strong>
+          <p>{jobs.length ? "Try a broader tier or a different search term." : "Newly discovered opportunities will appear here."}</p>
+          {!jobs.length && <Link className="primary-button button-link" href="/discovery">Discover opportunities</Link>}
+        </div>
       )}
     </WorkspaceLayout>
   );
