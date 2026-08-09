@@ -2369,3 +2369,59 @@ button, .primary-button, .secondary-button, .text-button { font-size: var(--text
 .work-authorization .checkbox-label { display: flex; gap: var(--space-3); align-items: flex-start; }
 .work-authorization .checkbox-label input { margin-top: 4px; }
 .work-authorization .checkbox-label small { display: block; color: var(--muted); font-weight: 400; }
+
+/* ---------------------------------------------------------------
+   Level fit
+   The third reading, shown alongside the tier and eligibility.
+   Off-level roles stay in the corpus and stay legible; they are
+   demoted from the default queue, never deleted.
+   --------------------------------------------------------------- */
+
+.level-chip {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  margin-top: var(--space-1); padding: 2px var(--space-2);
+  border-radius: var(--radius-pill); font-size: var(--text-label);
+  font-weight: 700; letter-spacing: .02em; white-space: nowrap;
+}
+.level-chip > span { font-weight: 800; }
+.level-clear { background: var(--success-soft); color: var(--green); }
+.level-warning { background: var(--warning-soft); color: var(--warning); }
+.level-blocked { background: var(--danger-soft); color: var(--danger); }
+.level-neutral { background: var(--paper); color: var(--muted); }
+
+.level-panel {
+  display: grid; gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--line); border-left-width: 4px;
+  border-radius: var(--radius-lg); background: var(--white);
+}
+.level-panel.level-clear { border-left-color: var(--green); background: var(--success-soft); }
+.level-panel.level-warning { border-left-color: var(--warning); background: var(--warning-soft); }
+.level-panel.level-blocked { border-left-color: var(--danger); background: var(--danger-soft); }
+.level-panel.level-neutral { border-left-color: var(--line); background: var(--surface-subtle); }
+.level-headline h2 { margin: var(--space-1) 0; font-size: var(--text-card-title); line-height: 1.2; }
+.level-headline p { color: var(--ink); font-size: var(--text-body-large); }
+
+.level-facts { display: flex; flex-wrap: wrap; gap: var(--space-6); margin: 0; }
+.level-facts dt { color: var(--muted); font-size: var(--text-label); text-transform: uppercase; letter-spacing: .04em; }
+.level-facts dd { margin: 2px 0 0; font-weight: 700; }
+
+.level-evidence { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.level-evidence li {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--white); border: 1px solid var(--line); border-radius: var(--radius-md);
+}
+.level-evidence-source {
+  color: var(--muted); font-size: var(--text-label); font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.level-evidence q { color: var(--ink); font-style: italic; }
+.level-evidence small { margin-left: auto; color: var(--green); font-weight: 700; }
+.level-basis { color: var(--muted); font-size: var(--text-label); }
+.level-basis span { font-weight: 700; }
+
+.level-derived { display: flex; flex-wrap: wrap; gap: var(--space-6); margin: 0 0 var(--space-4); }
+.level-derived dt { color: var(--muted); font-size: var(--text-label); text-transform: uppercase; letter-spacing: .04em; }
+.level-derived dd { margin: 2px 0 0; font-weight: 700; }
+.role-track .preference-form small { display: block; color: var(--muted); font-weight: 400; }

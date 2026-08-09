@@ -1,6 +1,11 @@
 import { JobStatus, type PrismaClient } from "@prisma/client";
 
 import { assessJob, loadCandidateFacts, persistAssessment } from "./eligibility/service";
+import {
+  assessJobLevel,
+  loadCandidateLevelProfile,
+  persistLevelAssessment,
+} from "./level-fit/service";
 import type { JobImportPreview } from "./job-import";
 import { type OpportunityTier, tierForScore } from "./opportunity-tiers";
 
@@ -191,6 +196,23 @@ export async function importJobPreview(
           normalizedRequirements: normalized.requirements,
         },
         await loadCandidateFacts(transaction),
+      ),
+    );
+
+    // Level fit is derived from the same posting but stored separately, so it
+    // can be refreshed when the candidate revises their target roles.
+    await persistLevelAssessment(
+      transaction,
+      jobId,
+      assessJobLevel(
+        {
+          id: jobId,
+          title: normalized.title,
+          normalizedDescription: normalized.description,
+          originalSourceText: normalized.description,
+          normalizedRequirements: normalized.requirements,
+        },
+        await loadCandidateLevelProfile(transaction),
       ),
     );
 

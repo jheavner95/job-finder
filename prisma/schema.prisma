@@ -76,6 +76,7 @@ model Job {
   activity               ActivityEvent[]
   intelligence           OpportunityIntelligence?
   eligibility            JobEligibilityAssessment?
+  levelFit               JobLevelAssessment?
   searchRuns             SearchRun[] @relation("JobsInSearchRun")
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
@@ -123,6 +124,29 @@ model JobEligibilityAssessment {
   job             Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@index([verdict])
+}
+
+// Level fit is stored apart from both JobEvaluation and JobEligibilityAssessment.
+//
+// It answers a third question — "is this appropriate for where the candidate is
+// in their career?" — and has to be recomputable when the candidate revises
+// their target roles, with no rescoring and no effect on eligibility.
+model JobLevelAssessment {
+  id              String   @id @default(cuid())
+  verdict         String
+  headline        String
+  // Denormalized for corpus reporting and queue filtering.
+  postingLevel    String
+  postingTrack    String
+  // Full PostingLevel including the evidence behind every conclusion.
+  posting         Json
+  detectorVersion String
+  assessedAt      DateTime @default(now())
+  jobId           String   @unique
+  job             Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([verdict])
+  @@index([postingLevel])
 }
 
 model CandidateEvidence {
@@ -581,6 +605,10 @@ model CandidateCareerPreferences {
   compensation      String?
   companyExclusions Json
   employmentTypes   Json
+  // Declared IC / player-coach / people-management intent. Null means "not
+  // stated", which yields no track verdict — years of experience never imply
+  // an appetite for managing people.
+  trackPreference   String?
   updatedAt         DateTime @updatedAt
   profileId         String   @unique
   profile           CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)

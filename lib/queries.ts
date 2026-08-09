@@ -15,6 +15,8 @@ import {
 import { normalizePostingContent, plainPostingText } from "./job-content";
 import { parseStoredConstraints } from "./eligibility/service";
 import type { EligibilityAssessment } from "./eligibility/types";
+import { parseStoredPostingLevel } from "./level-fit/service";
+import type { LevelFitAssessment } from "./level-fit/types";
 import {
   type Tiered,
   compareByTier,
@@ -40,6 +42,7 @@ const jobInclude = {
   },
   intelligence: true,
   eligibility: true,
+  levelFit: true,
 } satisfies Prisma.JobInclude;
 
 type IncludedJob = Prisma.JobGetPayload<{ include: typeof jobInclude }>;
@@ -67,6 +70,22 @@ function eligibilityAssessment(job: IncludedJob): EligibilityAssessment | null {
     ),
     detectorVersion: stored.detectorVersion,
     candidateFactsUpdatedAt: stored.candidateFactsUpdatedAt?.toISOString() ?? null,
+  };
+}
+
+/** Presentation reads the persisted verdict; it never recomputes one. */
+function levelFitAssessment(job: IncludedJob): LevelFitAssessment | null {
+  const stored = job.levelFit;
+  const posting = stored ? parseStoredPostingLevel(stored.posting) : null;
+  if (!stored || !posting) return null;
+  return {
+    verdict: stored.verdict as LevelFitAssessment["verdict"],
+    headline: stored.headline,
+    posting,
+    targetBand: null,
+    currentLevel: "unknown",
+    detectorVersion: stored.detectorVersion,
+    assessedAt: stored.assessedAt.toISOString(),
   };
 }
 
@@ -194,6 +213,7 @@ function toListItem(job: IncludedJob): TieredJobListItem {
     confidence: metadata.confidence,
     eligibility: metadata.eligibility,
     eligibilityAssessment: eligibilityAssessment(job),
+    levelFit: levelFitAssessment(job),
     summary: evaluation
       ? summaryFromReasoning(evaluation.reasoning)
       : "Not yet evaluated.",

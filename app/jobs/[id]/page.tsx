@@ -5,6 +5,10 @@ import { DecisionForm } from "@/app/components/DecisionForm";
 import { ReadingLayout } from "@/app/components/PageLayout";
 import { StatusPill } from "@/app/components/JobRow";
 import { EligibilityPanel } from "@/app/components/EligibilityBadge";
+import { LevelFitPanel } from "@/app/components/LevelFitBadge";
+import { LEVEL_LABEL } from "@/lib/level-fit/ladder";
+import { targetBand } from "@/lib/level-fit";
+import { loadCandidateLevelProfile } from "@/lib/level-fit/service";
 import { describeFacts } from "@/lib/eligibility";
 import { loadCandidateFacts } from "@/lib/eligibility/service";
 import type { IntelligenceGuidanceItem } from "@/lib/candidate-intelligence/types";
@@ -132,6 +136,15 @@ export default async function JobDetailPage({
   const evidence = job.evidence.slice(0, 5);
   const requirements = job.requirements.slice(0, 5);
   const declaredFacts = describeFacts(await loadCandidateFacts(prisma));
+  const levelProfile = await loadCandidateLevelProfile(prisma);
+  const band = targetBand(levelProfile);
+  const candidateSummary = band
+    ? `your ${LEVEL_LABEL[band.min]}–${LEVEL_LABEL[band.max]} target${
+        levelProfile.currentLevel === "unknown"
+          ? ""
+          : `, currently ${LEVEL_LABEL[levelProfile.currentLevel]}`
+      }${levelProfile.yearsExperience === null ? "" : ` · ${levelProfile.yearsExperience} years`}.`
+    : "no target level recorded in your career profile.";
 
   return (
     <ReadingLayout className="detail-page opportunity-review-page">
@@ -181,6 +194,8 @@ export default async function JobDetailPage({
               : <p>No material concern was detected.</p>}</div>
           </div>
         </section>
+
+        <LevelFitPanel assessment={job.levelFit} candidateSummary={candidateSummary} />
 
         <EligibilityPanel assessment={job.eligibilityAssessment} declared={declaredFacts} />
 

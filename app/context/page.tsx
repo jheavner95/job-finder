@@ -12,12 +12,15 @@ import { prisma } from "@/lib/db";
 import { getOnboardingState, strings } from "@/lib/onboarding";
 import { loadCandidateFacts } from "@/lib/eligibility/service";
 import { WorkAuthorizationForm } from "./WorkAuthorizationForm";
+import { RoleTrackForm } from "./RoleTrackForm";
+import { loadCandidateLevelProfile } from "@/lib/level-fit/service";
 
 export const dynamic = "force-dynamic";
 
 export default async function ContextPage() {
   const readiness = await evaluateContextLibrary();
   const eligibilityFacts = await loadCandidateFacts(prisma);
+  const levelProfile = await loadCandidateLevelProfile(prisma);
   const onboarding = await getOnboardingState(prisma);
   const sourceTasks = careerProfileTasks(readiness.documents);
   const onboardingStep = onboarding?.onboarding?.currentStep ?? 1;
@@ -134,6 +137,8 @@ export default async function ContextPage() {
           <div className="career-empty"><strong>Everything is complete.</strong><p>Your profile is ready to maintain as your career changes.</p></div>
         )}
       </section>
+
+      <RoleTrackForm profile={levelProfile} />
 
       <WorkAuthorizationForm facts={eligibilityFacts} />
 

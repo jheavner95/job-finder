@@ -1,4 +1,5 @@
 import type { EligibilityAssessment } from "./eligibility/types";
+import type { LevelFitAssessment } from "./level-fit/types";
 import type { CategoryResult } from "./types";
 import type { JobStatus } from "./types";
 import type { OpportunityIntelligenceData } from "./candidate-intelligence/types";
@@ -34,6 +35,8 @@ export type JobListItem = {
   eligibility: "eligible" | "excluded";
   /** Null when the job has not been assessed yet. */
   eligibilityAssessment: EligibilityAssessment | null;
+  /** Career-level appropriateness. Independent of both score and eligibility. */
+  levelFit: LevelFitAssessment | null;
   summary: string;
   matchReason: string;
   concerns: string[];

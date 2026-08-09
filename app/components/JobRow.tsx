@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { EligibilityBadge } from "@/app/components/EligibilityBadge";
+import { LevelFitBadge } from "@/app/components/LevelFitBadge";
 import {
   type OpportunityTier,
   tierForScore,
@@ -55,7 +56,9 @@ export function JobRow({ job }: { job: JobRowItem }) {
         </div>
         <span className="confidence-label">{tier}</span>
         <span className="confidence-label">{job.confidence}% confidence</span>
-        {/* Eligibility sits next to the tier, not inside the score. */}
+        {/* Three independent readings, side by side. They are allowed to
+            disagree — that disagreement is the useful part. */}
+        <LevelFitBadge assessment={job.levelFit} compact />
         <EligibilityBadge assessment={job.eligibilityAssessment} compact />
         {job.eligibility === "excluded" && (
           <span className="eligibility-label">Hard requirement conflict</span>
