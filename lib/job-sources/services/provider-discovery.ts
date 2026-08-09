@@ -1,6 +1,6 @@
 import type { CompanyConnector, Prisma, PrismaClient } from "@prisma/client";
 
-import { checkRobots } from "../robots";
+import { checkRobots, type RobotsDocumentCache } from "../robots";
 import { jobSourceRegistry, type JobSourceRegistry } from "../registry";
 import type {
   JobDisposition,
@@ -139,6 +139,12 @@ export class ProviderDiscoveryRunner {
     }
     const capability = getOperationalCapability(this.providerId);
 
+    // Cache the robots DOCUMENT per policy URL, not the decision per URL+path.
+    // Greenhouse, Lever and Ashby serve one robots.txt for every board but vary
+    // the path, so the old key refetched the same document once per board.
+    // Providers with a robots host per tenant (Recruitee, Personio) still need
+    // one fetch each — caching cannot and must not span hosts.
+    const robotsDocuments: RobotsDocumentCache = new Map();
     const robotsCache = new Map<string, Awaited<ReturnType<typeof checkRobots>>>();
 
     for (const connector of connectors) {
@@ -241,6 +247,7 @@ export class ProviderDiscoveryRunner {
             target.path,
             this.client,
             capability.robotsUnavailablePolicy,
+            robotsDocuments,
           );
           robotsCache.set(cacheKey, robots);
         } catch (error) {

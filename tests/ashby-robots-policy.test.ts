@@ -53,7 +53,8 @@ describe("Ashby documented public API robots policy", () => {
   });
 
   it("permits the public API for other 4xx statuses", async () => {
-    for (const status of [400, 403, 410, 429]) {
+    // 429 is deliberately absent: a rate limit is not an unavailable policy.
+    for (const status of [400, 403, 410]) {
       const decision = await checkRobots(
         ASHBY_ROBOTS,
         ASHBY_PATH,
@@ -62,6 +63,19 @@ describe("Ashby documented public API robots policy", () => {
       );
       expect(decision.allowed, `HTTP ${status}`).toBe(true);
     }
+  });
+
+  it("does NOT treat 429 as an unavailable policy", async () => {
+    // "Slow down" must never be read as "crawl freely", even for a provider
+    // holding the RFC 9309 4xx allowance. Retried once, then failed closed.
+    await expect(checkRobots(
+      ASHBY_ROBOTS,
+      ASHBY_PATH,
+      robotsResponder(429, "Too Many Requests") as unknown as typeof fetch,
+      ashbyPolicy(),
+      undefined,
+      { sleep: async () => {} },
+    )).rejects.toThrow(/rate-limited/);
   });
 
   it("respects an explicit Disallow that covers the endpoint", async () => {
