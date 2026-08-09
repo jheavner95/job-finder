@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 import { DecisionForm } from "@/app/components/DecisionForm";
 import { ReadingLayout } from "@/app/components/PageLayout";
 import { StatusPill } from "@/app/components/JobRow";
+import { EligibilityPanel } from "@/app/components/EligibilityBadge";
+import { describeFacts } from "@/lib/eligibility";
+import { loadCandidateFacts } from "@/lib/eligibility/service";
 import type { IntelligenceGuidanceItem } from "@/lib/candidate-intelligence/types";
 import { getJob } from "@/lib/queries";
 import { prisma } from "@/lib/db";
@@ -128,6 +131,7 @@ export default async function JobDetailPage({
   const actions = recommendedActions(job);
   const evidence = job.evidence.slice(0, 5);
   const requirements = job.requirements.slice(0, 5);
+  const declaredFacts = describeFacts(await loadCandidateFacts(prisma));
 
   return (
     <ReadingLayout className="detail-page opportunity-review-page">
@@ -151,7 +155,14 @@ export default async function JobDetailPage({
         <div className="opportunity-score">
           <strong>{job.score}</strong><span>Match</span><small>{tier}</small>
         </div>
-        <OpportunityActions jobId={job.id} sourceUrl={job.sourceUrl} application={application} />
+        <OpportunityActions
+          jobId={job.id}
+          sourceUrl={job.sourceUrl}
+          application={application}
+          blocked={job.eligibilityAssessment?.verdict === "INELIGIBLE"
+            ? { headline: job.eligibilityAssessment.headline }
+            : undefined}
+        />
       </header>
 
       <div className="opportunity-coaching">
@@ -170,6 +181,8 @@ export default async function JobDetailPage({
               : <p>No material concern was detected.</p>}</div>
           </div>
         </section>
+
+        <EligibilityPanel assessment={job.eligibilityAssessment} declared={declaredFacts} />
 
         <section className="readiness-section" aria-labelledby="readiness-title">
           <div className="section-intro"><p className="eyebrow">Application readiness</p><h2 id="readiness-title">Where you are ready—and where to strengthen</h2></div>

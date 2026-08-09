@@ -32,6 +32,7 @@ function job(
     },
     confidence: 70,
     eligibility: "eligible",
+    eligibilityAssessment: null,
     summary: "Deterministic test summary.",
     matchReason: "Strong deterministic fit.",
     concerns: [],

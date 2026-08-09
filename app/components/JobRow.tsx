@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EligibilityBadge } from "@/app/components/EligibilityBadge";
 import {
   type OpportunityTier,
   tierForScore,
@@ -18,8 +19,11 @@ export function StatusPill({ status }: { status: JobListItem["status"] }) {
 
 export function JobRow({ job }: { job: JobRowItem }) {
   const tier = job.tier ?? tierForScore(job.score);
+  // Kept visible, marked blocked. Deleting the row would hide a real posting
+  // and silently shrink the discovered corpus.
+  const blocked = job.eligibilityAssessment?.verdict === "INELIGIBLE";
   return (
-    <article className="job-row">
+    <article className={`job-row${blocked ? " job-row-blocked" : ""}`}>
       <Link
         className="job-main"
         href={`/jobs/${job.id}`}
@@ -51,6 +55,8 @@ export function JobRow({ job }: { job: JobRowItem }) {
         </div>
         <span className="confidence-label">{tier}</span>
         <span className="confidence-label">{job.confidence}% confidence</span>
+        {/* Eligibility sits next to the tier, not inside the score. */}
+        <EligibilityBadge assessment={job.eligibilityAssessment} compact />
         {job.eligibility === "excluded" && (
           <span className="eligibility-label">Hard requirement conflict</span>
         )}

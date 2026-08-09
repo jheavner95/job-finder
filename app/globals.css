@@ -2297,3 +2297,75 @@ button, .primary-button, .secondary-button, .text-button { font-size: var(--text
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
   .loading-stack span, .skeleton { animation: none; }
 }
+
+/* ---------------------------------------------------------------
+   Eligibility
+   Presented beside the fit tier, never inside the score. An
+   ineligible role stays on the page and stays readable — it is
+   marked, not removed, so the discovered corpus is never silently
+   smaller than it looks.
+   --------------------------------------------------------------- */
+
+.eligibility-chip {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  margin-top: var(--space-1); padding: 2px var(--space-2);
+  border-radius: var(--radius-pill); font-size: var(--text-label);
+  font-weight: 700; letter-spacing: .02em; white-space: nowrap;
+}
+.eligibility-chip > span { font-weight: 800; }
+.eligibility-clear { background: var(--success-soft); color: var(--green); }
+.eligibility-warning { background: var(--warning-soft); color: var(--warning); }
+.eligibility-blocked { background: var(--danger-soft); color: var(--danger); }
+.eligibility-neutral { background: var(--paper); color: var(--muted); }
+
+.job-row-blocked { background: var(--danger-soft); }
+.job-row-blocked .job-copy > .job-topline strong { text-decoration: line-through solid rgb(143 52 45 / 45%); }
+
+.eligibility-panel {
+  display: grid; gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--line); border-left-width: 4px;
+  border-radius: var(--radius-lg); background: var(--white);
+}
+.eligibility-panel.eligibility-clear { border-left-color: var(--green); background: var(--success-soft); }
+.eligibility-panel.eligibility-warning { border-left-color: var(--warning); background: var(--warning-soft); }
+.eligibility-panel.eligibility-blocked { border-left-color: var(--danger); background: var(--danger-soft); }
+.eligibility-panel.eligibility-neutral { border-left-color: var(--line); background: var(--surface-subtle); }
+.eligibility-headline h2 { margin: var(--space-1) 0; font-size: var(--text-card-title); line-height: 1.2; }
+.eligibility-headline p { color: var(--ink); font-size: var(--text-body-large); }
+
+.eligibility-evidence { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.eligibility-evidence li {
+  padding: var(--space-3) var(--space-4);
+  background: var(--white); border: 1px solid var(--line); border-radius: var(--radius-md);
+}
+.eligibility-evidence li.constraint-informational { opacity: .78; }
+.constraint-topline { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+.constraint-place { color: var(--green); font-weight: 700; font-size: var(--text-label); }
+.constraint-class {
+  margin-left: auto; padding: 1px var(--space-2);
+  border-radius: var(--radius-pill); background: var(--paper);
+  color: var(--muted); font-size: var(--text-label); font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.constraint-hard .constraint-class { background: var(--danger-soft); color: var(--danger); }
+.constraint-likely .constraint-class { background: var(--warning-soft); color: var(--warning); }
+.eligibility-evidence blockquote {
+  margin: var(--space-2) 0; padding-left: var(--space-3);
+  border-left: 2px solid var(--line); color: var(--ink); font-style: italic;
+}
+.eligibility-evidence small { color: var(--muted); }
+.eligibility-basis { color: var(--muted); font-size: var(--text-label); }
+.eligibility-basis span { font-weight: 700; }
+
+.pursuit-blocked {
+  display: grid; gap: 2px; padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--danger); border-radius: var(--radius-md);
+  background: var(--danger-soft); color: var(--danger);
+}
+.pursuit-blocked strong { font-size: var(--text-body, 1rem); }
+.pursuit-blocked span { color: var(--ink); font-size: var(--text-label); }
+
+.work-authorization .checkbox-label { display: flex; gap: var(--space-3); align-items: flex-start; }
+.work-authorization .checkbox-label input { margin-top: 4px; }
+.work-authorization .checkbox-label small { display: block; color: var(--muted); font-weight: 400; }

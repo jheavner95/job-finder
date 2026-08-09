@@ -1,3 +1,4 @@
+import type { EligibilityAssessment } from "./eligibility/types";
 import type { CategoryResult } from "./types";
 import type { JobStatus } from "./types";
 import type { OpportunityIntelligenceData } from "./candidate-intelligence/types";
@@ -25,7 +26,14 @@ export type JobListItem = {
   status: JobStatus;
   score: number;
   confidence: number;
+  /**
+   * The scoring engine's own hard-requirement flag. Retained unchanged: it is
+   * driven by `scoreJob`'s `hardRequirements`, which the import path has never
+   * populated. Eligibility below is the separate, evidence-backed answer.
+   */
   eligibility: "eligible" | "excluded";
+  /** Null when the job has not been assessed yet. */
+  eligibilityAssessment: EligibilityAssessment | null;
   summary: string;
   matchReason: string;
   concerns: string[];

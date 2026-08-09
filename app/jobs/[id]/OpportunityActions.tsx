@@ -10,10 +10,13 @@ export function OpportunityActions({
   jobId,
   sourceUrl,
   application,
+  blocked,
 }: {
   jobId: string;
   sourceUrl: string;
   application: { id: string; status: string } | null;
+  /** A stated requirement conflicts with the candidate's declared facts. */
+  blocked?: { headline: string };
 }) {
   const [state, action, pending] = useActionState(updateJobDecision, initialState);
 
@@ -23,11 +26,23 @@ export function OpportunityActions({
     else await navigator.clipboard.writeText(window.location.href);
   }
 
+  // Blocked, not hidden: everything except starting an application stays
+  // available, and an application already in flight is never taken away.
+  const barred = Boolean(blocked) && !application;
+
   return (
     <div className="opportunity-actions">
-      <Link className="primary-button button-link" href={application ? `/applications/${application.id}` : `/applications/new?jobId=${jobId}`}>
-        {application ? `Open Application · ${application.status}` : "Begin Application"}
-      </Link>
+      {barred ? (
+        <div className="pursuit-blocked" role="status">
+          <strong>⊘ Application blocked</strong>
+          <span>{blocked?.headline}</span>
+          <a href="#eligibility-title">See the evidence</a>
+        </div>
+      ) : (
+        <Link className="primary-button button-link" href={application ? `/applications/${application.id}` : `/applications/new?jobId=${jobId}`}>
+          {application ? `Open Application · ${application.status}` : "Begin Application"}
+        </Link>
+      )}
       <form action={action}>
         <input type="hidden" name="jobId" value={jobId} />
         <button className="secondary-button" name="status" value="Saved" disabled={pending}>Save</button>

@@ -13,6 +13,8 @@ import {
   ensureOpportunityIntelligence,
 } from "./candidate-intelligence/service";
 import { normalizePostingContent, plainPostingText } from "./job-content";
+import { parseStoredConstraints } from "./eligibility/service";
+import type { EligibilityAssessment } from "./eligibility/types";
 import {
   type Tiered,
   compareByTier,
@@ -37,9 +39,36 @@ const jobInclude = {
     take: 1,
   },
   intelligence: true,
+  eligibility: true,
 } satisfies Prisma.JobInclude;
 
 type IncludedJob = Prisma.JobGetPayload<{ include: typeof jobInclude }>;
+
+/**
+ * Rebuild the stored assessment for presentation.
+ *
+ * Nothing is recomputed here — the verdict shown is the one that was persisted,
+ * so what the list row says and what the detail page says can never disagree.
+ */
+function eligibilityAssessment(job: IncludedJob): EligibilityAssessment | null {
+  const stored = job.eligibility;
+  if (!stored) return null;
+  const constraints = parseStoredConstraints(stored.constraints);
+  return {
+    verdict: stored.verdict as EligibilityAssessment["verdict"],
+    headline: stored.headline,
+    constraints,
+    blocking: constraints.filter(
+      (item) => stored.verdict === "INELIGIBLE" && item.classification === "HARD",
+    ),
+    unresolved: constraints.filter(
+      (item) =>
+        stored.verdict === "REVIEW_REQUIRED" && item.classification !== "INFORMATIONAL",
+    ),
+    detectorVersion: stored.detectorVersion,
+    candidateFactsUpdatedAt: stored.candidateFactsUpdatedAt?.toISOString() ?? null,
+  };
+}
 
 function stringArray(value: Prisma.JsonValue | null): string[] {
   return Array.isArray(value)
@@ -164,6 +193,7 @@ function toListItem(job: IncludedJob): TieredJobListItem {
     score,
     confidence: metadata.confidence,
     eligibility: metadata.eligibility,
+    eligibilityAssessment: eligibilityAssessment(job),
     summary: evaluation
       ? summaryFromReasoning(evaluation.reasoning)
       : "Not yet evaluated.",

@@ -28,10 +28,22 @@ export default async function ReviewPage({
   const inFilter = (tier: OpportunityTier, filter: Filter) =>
     filter === "Reviewable" ? isReviewable(tier) : tier === filter;
 
-  const filtered = jobs.filter((job) =>
-    inFilter(job.tier, selected)
-    && `${job.title} ${job.company} ${job.location}`.toLowerCase().includes(query));
+  const isBlocked = (job: (typeof jobs)[number]) =>
+    job.eligibilityAssessment?.verdict === "INELIGIBLE";
+
+  const filtered = jobs
+    .filter((job) =>
+      inFilter(job.tier, selected)
+      && `${job.title} ${job.company} ${job.location}`.toLowerCase().includes(query))
+    // Definitively ineligible roles stay in the queue but sink below the ones
+    // that can actually be pursued. Removing them would hide a real posting and
+    // make the discovered corpus look smaller than it is.
+    .sort((left, right) => Number(isBlocked(left)) - Number(isBlocked(right)));
   const reviewable = jobs.filter((job) => isReviewable(job.tier)).length;
+  const blocked = filtered.filter(isBlocked).length;
+  const needsCheck = filtered.filter(
+    (job) => job.eligibilityAssessment?.verdict === "REVIEW_REQUIRED",
+  ).length;
 
   return (
     <WorkspaceLayout>
@@ -62,7 +74,12 @@ export default async function ReviewPage({
         </form>
       </div>
       <div className="queue-summary" aria-live="polite">
-        <span><b>{filtered.length}</b> of {reviewable} worth reviewing<small> · {jobs.length} discovered</small></span>
+        <span>
+          <b>{filtered.length - blocked}</b> of {reviewable} you can pursue
+          <small> · {jobs.length} discovered</small>
+          {needsCheck > 0 && <small> · {needsCheck} need an eligibility check</small>}
+          {blocked > 0 && <small> · {blocked} blocked by eligibility</small>}
+        </span>
         <span>Sorted by fit <b>↓</b></span>
       </div>
       {filtered.length ? (

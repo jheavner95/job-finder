@@ -75,6 +75,7 @@ model Job {
   application            Application?
   activity               ActivityEvent[]
   intelligence           OpportunityIntelligence?
+  eligibility            JobEligibilityAssessment?
   searchRuns             SearchRun[] @relation("JobsInSearchRun")
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
@@ -97,6 +98,31 @@ model JobEvaluation {
   evidence         CandidateEvidence[]
 
   @@index([jobId, evaluatedAt])
+}
+
+// Eligibility is stored apart from JobEvaluation on purpose.
+//
+// A match score answers "how well does this role fit?"; eligibility answers
+// "can this candidate pursue it?". They also change for different reasons: a
+// score is only valid for the scoring run that produced it, whereas an
+// eligibility verdict has to be recomputed whenever the candidate updates their
+// declared work authorization — with no rescoring, and no risk of disturbing a
+// persisted score or tier.
+model JobEligibilityAssessment {
+  id              String   @id @default(cuid())
+  verdict         String
+  headline        String
+  // Full PostingConstraint[] including informational findings, each carrying
+  // its verbatim evidence so the user can check any verdict against the source.
+  constraints     Json
+  detectorVersion String
+  // Null when the verdict was reached with no declared candidate facts.
+  candidateFactsUpdatedAt DateTime?
+  assessedAt      DateTime @default(now())
+  jobId           String   @unique
+  job             Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([verdict])
 }
 
 model CandidateEvidence {
@@ -502,6 +528,10 @@ model CandidateProfile {
   displayName     String
   headline        String
   yearsExperience Int?
+  // Work-authorization facts the candidate declared themselves. Never derived
+  // from a resume, an email domain, or the locations of saved jobs. Null means
+  // "not declared", which produces a review prompt rather than an exclusion.
+  eligibilityFacts Json?
   sourceUpdatedAt DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

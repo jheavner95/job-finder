@@ -1,5 +1,6 @@
 import { JobStatus, type PrismaClient } from "@prisma/client";
 
+import { assessJob, loadCandidateFacts, persistAssessment } from "./eligibility/service";
 import type { JobImportPreview } from "./job-import";
 import { type OpportunityTier, tierForScore } from "./opportunity-tiers";
 
@@ -175,6 +176,24 @@ export async function importJobPreview(
         scoringVersion: "deterministic-v1",
       },
     });
+    // Eligibility is derived alongside the score but stored separately, so the
+    // verdict can be refreshed when the candidate updates their declaration
+    // without re-running or disturbing the evaluation above.
+    await persistAssessment(
+      transaction,
+      jobId,
+      assessJob(
+        {
+          id: jobId,
+          title: normalized.title,
+          normalizedDescription: normalized.description,
+          originalSourceText: normalized.description,
+          normalizedRequirements: normalized.requirements,
+        },
+        await loadCandidateFacts(transaction),
+      ),
+    );
+
     await transaction.activityEvent.create({
       data: {
         jobId,

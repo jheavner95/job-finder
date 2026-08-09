@@ -182,6 +182,7 @@ function fixture(
     },
     confidence: 70,
     eligibility: "eligible",
+    eligibilityAssessment: null,
     summary: "Deterministic test summary.",
     matchReason: "Deterministic fit.",
     concerns: [],
