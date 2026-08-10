@@ -38,9 +38,16 @@ const jobInclude = {
     take: 1,
     include: { evidence: true },
   },
+  /*
+   * The whole history, not just the latest.
+   *
+   * A REJECTED decision means two different things depending on what came
+   * before it: on its own it is passing on an opportunity, but after an
+   * APPLIED it is the outcome of an application. Only the sequence can tell
+   * them apart, and the corpus holds five decisions in total.
+   */
   decisions: {
     orderBy: { decidedAt: "desc" as const },
-    take: 1,
   },
   intelligence: true,
   eligibility: true,
@@ -217,6 +224,11 @@ function toListItem(job: IncludedJob, preferredWorkMode: string | null): TieredJ
     sourceUrl: job.sourceUrl,
     verification: verification(job),
     status: currentStatus(job),
+    decisions: job.decisions.map((decision) => ({
+      status: statusFromPrisma[decision.decision],
+      at: decision.decidedAt.toISOString(),
+      note: decision.reason,
+    })),
     score,
     confidence: metadata.confidence,
     eligibility: metadata.eligibility,

@@ -4,17 +4,26 @@ import { useActionState } from "react";
 import type { JobStatus } from "@/lib/types";
 import { updateJobDecision, type DecisionState } from "@/app/jobs/[id]/actions";
 
+/**
+ * The decisions a person makes, not the engine's classification enum.
+ *
+ * "New", "Strong Match" and "Possible" are discovery states the scorer assigns;
+ * offering them as choices invited the user to overwrite a measurement with an
+ * opinion, and none of the surfaces read them as decisions anyway.
+ */
 const statuses: JobStatus[] = [
-  "New",
-  "Strong Match",
-  "Possible",
-  "Rejected",
   "Saved",
   "Applied",
   "Interviewing",
   "Offer",
+  "Rejected",
   "Closed",
 ];
+
+const DECISION_HELP: Partial<Record<JobStatus, string>> = {
+  Rejected: "Passing on it, or not selected after applying",
+  Closed: "The posting is gone or you withdrew",
+};
 
 const initialState: DecisionState = { status: "idle", message: "" };
 
@@ -34,8 +43,12 @@ export function DecisionForm({
       <p>Automated evaluation stays separate from your decision.</p>
       <label>
         Status
-        <select name="status" defaultValue={currentStatus} disabled={pending}>
-          {statuses.map((status) => <option key={status}>{status}</option>)}
+        <select name="status" defaultValue={statuses.includes(currentStatus) ? currentStatus : "Saved"} disabled={pending}>
+          {statuses.map((status) => (
+            <option key={status} value={status}>
+              {DECISION_HELP[status] ? `${status} — ${DECISION_HELP[status]}` : status}
+            </option>
+          ))}
         </select>
       </label>
       <label>

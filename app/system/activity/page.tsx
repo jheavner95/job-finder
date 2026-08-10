@@ -1,0 +1,51 @@
+import Link from "next/link";
+
+import { PageHeader } from "@/app/components/PageHeader";
+import { WorkspaceLayout } from "@/app/components/PageLayout";
+import { SubmitButton } from "@/app/components/SubmitButton";
+import { prisma } from "@/lib/db";
+
+import {
+  markAllNotificationsReadAction,
+  markNotificationReadAction,
+} from "./actions";
+
+export const dynamic = "force-dynamic";
+
+export default async function NotificationsPage() {
+  const notifications = await prisma.notification.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  const unread = notifications.filter((notification) => !notification.readAt).length;
+
+  return (
+    <WorkspaceLayout className="notifications-page">
+      <PageHeader
+        /* "Notifications" implied things the user should read. Every entry is
+           a scan result, so the page is named for what it holds. */
+        title="Activity"
+        subtitle="What discovery has done, most recent first. Nothing leaves this device."
+        action={unread ? <form action={markAllNotificationsReadAction}><SubmitButton pendingLabel="Updating…">Mark all read</SubmitButton></form> : undefined}
+      />
+      <div className="notification-list">
+        {notifications.map((notification) => (
+          <article className={notification.readAt ? "notification-card" : "notification-card unread"} key={notification.id}>
+            <span aria-hidden="true" />
+            <div>
+              <p>{notification.type.replaceAll("_", " ")}</p>
+              <h2>{notification.title}</h2>
+              <p>{notification.message}</p>
+              <small>{new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(notification.createdAt)}</small>
+            </div>
+            <div className="notification-actions">
+              {notification.href && <Link href={notification.href}>View →</Link>}
+              {!notification.readAt && <form action={markNotificationReadAction}><input type="hidden" name="notificationId" value={notification.id} /><SubmitButton className="text-button" pendingLabel="Updating…" ariaLabel={`Mark ${notification.title} as read`}>Mark read</SubmitButton></form>}
+            </div>
+          </article>
+        ))}
+        {!notifications.length && <div className="briefing-empty"><strong>You’re all caught up.</strong><p>Completed searches and source issues will appear here.</p></div>}
+      </div>
+    </WorkspaceLayout>
+  );
+}

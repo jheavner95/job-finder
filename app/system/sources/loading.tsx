@@ -1,6 +1,6 @@
 import { WorkspaceLayout } from "@/app/components/PageLayout";
 
-export default function DiscoveryLoading() {
+export default function SourcesLoading() {
   return (
     <WorkspaceLayout className="discovery-workspace-page">
       <div className="discovery-skeleton skeleton-title" />

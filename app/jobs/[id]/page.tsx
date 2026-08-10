@@ -13,6 +13,8 @@ import { loadCandidateLevelProfile } from "@/lib/level-fit/service";
 import { describeFacts } from "@/lib/eligibility";
 import { loadCandidateFacts } from "@/lib/eligibility/service";
 import type { IntelligenceGuidanceItem } from "@/lib/candidate-intelligence/types";
+import { APPLICATION_STATE_LABEL, deriveApplication, sinceLabel } from "@/lib/applications";
+import { factsFor } from "@/lib/opportunity-presentation";
 import { getJob } from "@/lib/queries";
 import { prisma } from "@/lib/db";
 import type { JobDetailModel } from "@/lib/view-models";
@@ -121,11 +123,12 @@ export default async function JobDetailPage({
 }) {
   const { id } = await params;
   const query = await searchParams;
-  const [job, application] = await Promise.all([
-    getJob(id),
-    prisma.application.findUnique({ where: { jobId: id }, select: { id: true, status: true } }),
-  ]);
+  const job = await getJob(id);
   if (!job) notFound();
+
+  // Derived from this job's own decisions — the same derivation Applications
+  // uses, so the two surfaces cannot describe the same role differently.
+  const application = deriveApplication(job, new Date());
 
   const canInspect = process.env.NODE_ENV === "development"
     || process.env.JOB_FINDER_DEVELOPER_MODE === "true";
@@ -149,7 +152,9 @@ export default async function JobDetailPage({
 
   return (
     <ReadingLayout className="detail-page opportunity-review-page">
-      <Link className="back-button" href="/review">← Back to review queue</Link>
+      <Link className="back-button" href={application ? "/applications" : "/review"}>
+        ← Back to {application ? "applications" : "opportunities"}
+      </Link>
       {(query.import === "created" || query.import === "duplicate") && (
         <div className="import-success" role="status">
           <strong>{query.import === "created" ? "Opportunity imported and evaluated." : "This opportunity was already in your library."}</strong>
@@ -161,10 +166,33 @@ export default async function JobDetailPage({
           <p>{job.company}</p>
           <h1>{job.title}</h1>
           <div className="opportunity-meta">
-            <span>{job.location}</span><span>{job.remoteStatus}</span><span>{job.employmentType}</span>
-            <StatusPill status={job.status} />
+            {/* Same suppression the rows use. This line rendered the raw
+                fields, so a posting whose employment type is "n/a" printed
+                "n/a" between its location and its status. */}
+            {factsFor(job).map((fact) => (
+              <span key={fact}>{fact}</span>
+            ))}
+            {/* The application line below says this better and says it once. */}
+            {!application && <StatusPill status={job.status} />}
           </div>
           <small>Discovered {job.verification.importAge} · {job.verification.label}</small>
+          {/* The application, stated on the opportunity rather than kept on a
+              second page. One canonical detail surface: what the row on
+              Applications says, this says, in the same words — and only once,
+              where the hero previously carried an APPLIED pill, a state chip
+              and a date line all saying "Applied". */}
+          {application && (
+            <p className="opportunity-application">
+              <span className={`app-state app-state-${application.state}`}>
+                {application.outcome ?? APPLICATION_STATE_LABEL[application.state]}
+              </span>
+              <span>
+                {application.state === "applied"
+                  ? sinceLabel(application.appliedAt, new Date())
+                  : `applied ${sinceLabel(application.appliedAt, new Date())}, last update ${sinceLabel(application.lastActivityAt, new Date())}`}
+              </span>
+            </p>
+          )}
         </div>
         <div className={`opportunity-score${job.evidenceCoverage.sufficient ? "" : " opportunity-score-unmeasured"}`}>
           <strong>{job.score}</strong><span>Match</span>
@@ -175,7 +203,7 @@ export default async function JobDetailPage({
         <OpportunityActions
           jobId={job.id}
           sourceUrl={job.sourceUrl}
-          application={application}
+          applicationState={application?.state ?? null}
           blocked={job.eligibilityAssessment?.verdict === "INELIGIBLE"
             ? { headline: job.eligibilityAssessment.headline }
             : undefined}
@@ -214,7 +242,7 @@ export default async function JobDetailPage({
              preference, not a verdict on the role, and DE-3M owns how these
              dimensions should finally be composed. */
           <section className={`work-mode-line work-mode-${workModeTone(job.workMode.compatibility)}`}>
-            <span className="eyebrow">Work mode · separate from match score</span>
+            <span className="eyebrow">Work mode</span>
             <p>
               <strong>{workModeCompatibilityLabel(job.workMode.compatibility)}</strong>
               <span> {job.workMode.headline}</span>
@@ -247,7 +275,10 @@ export default async function JobDetailPage({
           <section className="why-match-section" aria-labelledby="why-match-title">
             <p className="eyebrow">Why this matches</p><h2 id="why-match-title">Your strongest supporting evidence</h2>
             {evidence.length ? <ol>{evidence.map((item) => (
-              <li key={item.id}><strong>{item.label}</strong><p>{item.excerpt}</p><small>{item.contextFile}</small></li>
+              /* The source filename ("career-profile.md") is storage, not a
+                 fact about the candidate. UX-7 removed it from the evidence
+                 cards; it survived here and on the résumé list. */
+              <li key={item.id}><strong>{item.label}</strong><p>{item.excerpt}</p></li>
             ))}</ol> : <p>No verified evidence is attached yet.</p>}
             <a className="text-button" href="#candidate-intelligence">View All Evidence →</a>
           </section>

@@ -5,7 +5,9 @@ import {
   type CpiGroup,
   type CpiMetric,
 } from "@/lib/career-performance";
+import { APPLICATION_STATE_LABEL, buildApplications } from "@/lib/applications";
 import { prisma } from "@/lib/db";
+import { getJobs } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -62,43 +64,51 @@ function PerformanceTable({
 }
 
 export default async function InsightsPage() {
-  const [applications, settings] = await Promise.all([
-    prisma.application.findMany({
-      include: {
-        job: { include: { evaluations: { orderBy: { evaluatedAt: "desc" }, take: 1 } } },
-        timeline: { orderBy: { eventAt: "asc" } },
-        interviews: true,
-        documents: true,
-        followUps: true,
-      },
-      orderBy: { updatedAt: "desc" },
-    }),
+  const [jobs, settings] = await Promise.all([
+    getJobs(),
     prisma.careerPerformanceSettings.upsert({
       where: { id: "primary" },
       update: {},
       create: { id: "primary", minSampleSize: 5 },
     }),
   ]);
+
+  /*
+   * The same derived applications Applications and Today read.
+   *
+   * This page used to query the `Application` table directly and so reported
+   * "Applications submitted 0 · 0 factual records" while the user had four
+   * applied decisions and three other surfaces said so. Reading one source
+   * removes the contradiction without inventing anything: interviews,
+   * documents and follow-ups stay empty because none are recorded, which is
+   * why the derived rates below still say there is not enough history.
+   */
+  const applications = buildApplications(jobs, new Date()).all;
   const analytics = calculateCareerPerformance(
     applications.map((application) => ({
-      id: application.id,
-      status: application.status,
+      id: application.jobId,
+      status: APPLICATION_STATE_LABEL[application.state],
       outcome: application.outcome,
-      appliedAt: application.appliedAt,
-      createdAt: application.createdAt,
-      updatedAt: application.updatedAt,
-      sourceProvider: application.sourceProvider,
-      industry: application.industry,
+      appliedAt: new Date(application.appliedAt),
+      createdAt: new Date(application.appliedAt),
+      updatedAt: new Date(application.lastActivityAt),
+      sourceProvider: null,
+      industry: null,
       role: application.role,
-      matchScore: application.job.evaluations[0]?.score ?? null,
-      timeline: application.timeline,
-      interviews: application.interviews,
-      documents: application.documents,
-      followUps: application.followUps,
+      matchScore: null,
+      timeline: application.history.map((event) => ({
+        type: event.label,
+        eventAt: new Date(event.at),
+      })),
+      interviews: [],
+      documents: [],
+      followUps: [],
     })),
     settings.minSampleSize,
   );
-  const lastUpdated = applications[0]?.updatedAt ?? settings.updatedAt;
+  // Applications are sorted by most recent movement, so the first one carries
+  // the newest thing this page has to report on.
+  const lastUpdated = applications[0] ? new Date(applications[0].lastActivityAt) : settings.updatedAt;
   const offerRate = analytics.overview.find((item) => item.label === "Offer rate")!;
 
   return (

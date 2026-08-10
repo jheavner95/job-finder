@@ -228,7 +228,7 @@ export function ScanControl({
               <Link className="primary-button button-link" href="/review">{snapshot.imported ? "Review New Opportunities" : "Review Opportunities"}</Link>
               {!!snapshot.exclusions.length && <a className="secondary-button button-link" href="#scan-exclusions">View Exclusions</a>}
               <button className="secondary-button" type="button" onClick={start}>Scan Again</button>
-              <Link className="text-button" href="/sources">Manage Sources</Link>
+              <Link className="text-button" href="/system/sources">Source detail</Link>
             </div>
           </section>
 
@@ -236,7 +236,14 @@ export function ScanControl({
             <section className="new-opportunities">
               <div className="scan-section-heading"><div><p className="eyebrow">New opportunities</p><h2>Ready for your decision</h2></div><Link href="/review">Review all →</Link></div>
               <div className="new-opportunity-grid">{snapshot.newOpportunities.map((job) => (
-                <Link href={`/jobs/${job.id}`} key={job.id}><span>{job.company}</span><strong>{job.title}</strong><b>Score {job.score}</b></Link>
+                /* Shared grammar: role, then employer, then fit. */
+                <Link href={`/jobs/${job.id}`} key={job.id}>
+                  <span className="opp-identity">
+                    <strong className="opp-title">{job.title}</strong>
+                    <span className="opp-company">{job.company}</span>
+                  </span>
+                  <span className="opp-fit opp-fit-strong"><b>{job.score}</b><span>match</span></span>
+                </Link>
               ))}</div>
             </section>
           )}

@@ -79,7 +79,11 @@ function offered(application: CpiApplication) {
 
 function interviewed(application: CpiApplication) {
   return application.interviews.length > 0
-    || application.timeline.some((event) => /interview scheduled|interview completed|phone screen/i.test(event.type));
+    // A recorded Interviewing state is itself the evidence. Before UX-4 this
+    // looked only for scheduled-interview rows, which only the unused ATS
+    // subsystem ever created, so a real interview counted as none.
+    || application.status === "Interviewing"
+    || application.timeline.some((event) => /interview/i.test(event.type));
 }
 
 function completed(application: CpiApplication) {

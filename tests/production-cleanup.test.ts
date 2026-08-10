@@ -99,7 +99,11 @@ describe("safe application errors", () => {
   });
 
   it("provides independent route boundaries for major workspaces", () => {
-    for (const route of ["briefing", "evidence", "getting-started", "import", "notifications", "reports", "review", "searches", "sources"]) {
+    for (const route of [
+      "evidence", "getting-started", "review", "sources",
+      // System owns one boundary plus the workspaces it absorbed.
+      "system", "system/activity", "system/import", "system/schedules", "system/sources",
+    ]) {
       expect(readFileSync(`app/${route}/error.tsx`, "utf8")).toContain("../error");
     }
     expect(readFileSync("app/global-error.tsx", "utf8")).toContain("ErrorNotice");

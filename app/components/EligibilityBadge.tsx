@@ -95,7 +95,7 @@ export function EligibilityPanel({
       aria-labelledby="eligibility-title"
     >
       <div className="eligibility-headline">
-        <p className="eyebrow">Eligibility · separate from match score</p>
+        <p className="eyebrow">Can you apply?</p>
         <h2 id="eligibility-title">{verdictLabel(assessment.verdict)}</h2>
         <p>{assessment.headline}</p>
       </div>

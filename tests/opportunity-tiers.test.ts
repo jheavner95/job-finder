@@ -162,6 +162,7 @@ function fixture(
     id,
     score,
     status,
+    decisions: [],
     title: `Role ${id}`,
     company: "Example",
     companyInitials: "EX",

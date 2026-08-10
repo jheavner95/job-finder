@@ -1,243 +1,178 @@
 import Link from "next/link";
-import { WorkspaceLayout } from "@/app/components/PageLayout";
 
+import { WorkspaceLayout } from "@/app/components/PageLayout";
 import { LocalGreeting } from "@/app/components/LocalGreeting";
-import { evaluateContextLibrary } from "@/lib/context-readiness";
-import {
-  getNextContextActions,
-} from "@/lib/context-presentation";
-import { presentDashboard } from "@/lib/dashboard-presentation";
-import { tierTone } from "@/lib/opportunity-tiers";
-import { getDashboardSummary } from "@/lib/queries";
+import { OpportunityList, OpportunityRowView } from "@/app/components/OpportunityRow";
+import { loadProfile } from "@/lib/profile";
 import { prisma } from "@/lib/db";
-import { applicationAttentionStates } from "@/lib/application-intelligence";
+import { COUNT_LABEL } from "@/lib/opportunity-presentation";
+import { getDashboardSummary } from "@/lib/queries";
+import { RECENT_WINDOW_HOURS, buildToday } from "@/lib/today";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
-  const [summary, readiness, lastScan, nextSchedule, applications] = await Promise.all([
+/** "3 hours ago" for the one discovery fact worth stating. */
+function since(value: Date | null): string | null {
+  if (!value) return null;
+  const hours = Math.floor((Date.now() - value.getTime()) / 3_600_000);
+  if (hours < 1) return "in the last hour";
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+/**
+ * Today — the daily decision brief.
+ *
+ * Replaces a dashboard that opened with a greeting, five pipeline tiles (four
+ * of them permanently zero), a discovery status band, two duplicate copies of
+ * the same role, and a decision summary restating a count already shown twice.
+ * Two opportunities were visible above the fold.
+ *
+ * The order here is the order of the questions: what changed, what deserves
+ * attention, what to do next. Operational information — crawls, connectors,
+ * providers, duplicate-prevention totals — answers none of them and is not
+ * shown; it belongs to System.
+ */
+export default async function TodayPage() {
+  const [summary, profile, lastScan] = await Promise.all([
     getDashboardSummary(),
-    evaluateContextLibrary(),
+    loadProfile(prisma),
     prisma.discoveryBatch.findFirst({
       where: { status: { not: "Running" } },
       orderBy: { startedAt: "desc" },
     }),
-    prisma.connectorSchedule.findFirst({
-      where: { nextRunAt: { not: null }, connector: { enabled: true } },
-      orderBy: { nextRunAt: "asc" },
-    }),
-    prisma.application.findMany({
-      include: {
-        followUps: { where: { completedAt: null }, orderBy: { dueAt: "asc" } },
-        interviews: { orderBy: { scheduledAt: "asc" } },
-        timeline: { orderBy: { eventAt: "desc" }, take: 1 },
-        attentionDismissals: true,
-      },
-      orderBy: { updatedAt: "desc" },
-    }),
   ]);
-  const briefing = presentDashboard(summary.jobs);
-  const contextActions = getNextContextActions(readiness.documents);
-  const nextContextAction = contextActions[0];
-  const readinessLabel = readiness.calibrated
-    ? "Complete"
-    : readiness.percentage >= 40
-      ? "In progress"
-      : "Needs review";
-  const visibleDecisionCounts = [
-    { label: "Awaiting review", value: briefing.awaitingReview },
-    { label: "Saved opportunities", value: briefing.saved },
-    { label: "Recently closed", value: briefing.recentlyClosed },
-  ].filter((item) => item.value > 0);
-  const now = new Date();
-  const endOfToday = new Date(now);
-  endOfToday.setHours(23, 59, 59, 999);
-  const endOfWeek = new Date(now);
-  endOfWeek.setDate(endOfWeek.getDate() + 7);
-  const applicationsInProgress = applications.filter((item) =>
-    !["Accepted", "Declined", "Rejected", "Withdrawn", "Closed"].includes(item.status),
-  );
-  const interviewsThisWeek = applications.reduce(
-    (sum, item) => sum + item.interviews.filter((interview) =>
-      interview.scheduledAt >= now && interview.scheduledAt <= endOfWeek,
-    ).length,
-    0,
-  );
-  const followUpsDueToday = applications.reduce(
-    (sum, item) => sum + item.followUps.filter((followUp) => followUp.dueAt <= endOfToday).length,
-    0,
-  );
+
+  // Anchored to request time: the product records when a posting was first
+  // seen, but nothing records when the user last opened it, so "since your
+  // last visit" would be a claim the data cannot support.
+  const today = buildToday(summary.jobs, new Date());
+  const { counts } = today;
+  const lastChecked = since(lastScan?.completedAt ?? lastScan?.startedAt ?? null);
+  const empty = counts.discovered === 0;
+  // Same list Your Profile shows, so the two never disagree about what is
+  // missing or how much of it there is.
+  const profileGaps = profile.gaps.length;
+
   return (
-    <WorkspaceLayout className="briefing-page">
-      <header className="briefing-header">
-        <div>
-          <p className="eyebrow">Private workspace</p>
-          <h1><LocalGreeting /></h1>
-          <p className="briefing-lead">{briefing.briefing.title}</p>
-          <p className="briefing-detail">{briefing.briefing.detail}</p>
-        </div>
-        {briefing.primaryAction && (
-          <Link className="primary-button button-link briefing-primary" href={briefing.primaryAction.href}>
-            {briefing.primaryAction.label}<span aria-hidden="true">→</span>
-          </Link>
-        )}
+    <WorkspaceLayout className="today-page">
+      <header className="today-header">
+        <p className="today-greeting">
+          <LocalGreeting />
+        </p>
+        <h1>
+          {empty
+            ? "Nothing discovered yet."
+            : counts.needsReview > 0
+              ? `${COUNT_LABEL.needsReview(counts.needsReview)}.`
+              : "You're all caught up."}
+        </h1>
+        <p className="today-state">
+          {today.newCount > 0 && (
+            <>
+              <strong>{today.newCount} new</strong> in the last {RECENT_WINDOW_HOURS} hours
+            </>
+          )}
+          {today.newCount > 0 && counts.worthConsidering > 0 && <span aria-hidden="true"> · </span>}
+          {counts.worthConsidering > 0 && <>{COUNT_LABEL.worthConsidering(counts.worthConsidering)}</>}
+          {counts.discovered > 0 && <span aria-hidden="true"> · </span>}
+          {counts.discovered > 0 && <>{COUNT_LABEL.discovered(counts.discovered)}</>}
+        </p>
       </header>
 
-      <section className="dashboard-pipeline" aria-labelledby="dashboard-pipeline-title">
-        <div><p className="eyebrow">Application intelligence</p><h2 id="dashboard-pipeline-title">Your career pipeline</h2></div>
-        <dl>
-          <div><dt>New opportunities</dt><dd>{briefing.awaitingReview}</dd></div>
-          <div><dt>Applications in progress</dt><dd>{applicationsInProgress.length}</dd></div>
-          <div><dt>Interviews this week</dt><dd>{interviewsThisWeek}</dd></div>
-          <div><dt>Follow-ups due today</dt><dd>{followUpsDueToday}</dd></div>
-          <div><dt>Offers</dt><dd>{applications.filter((item) => item.status === "Offer").length}</dd></div>
-        </dl>
-        <Link className="secondary-button button-link" href="/applications">Open Applications</Link>
-      </section>
-
-      <section className="dashboard-scan-card" aria-labelledby="dashboard-scan-title">
-        <div>
-          <p className="eyebrow">Discovery status</p>
-          <h2 id="dashboard-scan-title">{lastScan ? "Job discovery is up to date" : "Job Finder has not scanned for opportunities yet."}</h2>
-        </div>
-        <dl>
-          <div><dt>Last scan</dt><dd>{lastScan?.completedAt ? new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(lastScan.completedAt) : "Never"}</dd></div>
-          <div><dt>New matches</dt><dd>{lastScan ? lastScan.jobsImported + lastScan.duplicates : "—"}</dd></div>
-          <div><dt>Next scan</dt><dd>{nextSchedule?.nextRunAt ? new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(nextSchedule.nextRunAt) : "Manual only"}</dd></div>
-        </dl>
-        <Link className="primary-button button-link" href="/scan">{lastScan ? "Scan Jobs" : "Run Your First Scan"}</Link>
-      </section>
-
-      <section className="attention-section" aria-labelledby="attention-title">
-        <div className="briefing-section-heading">
-          <div>
-            <p className="eyebrow">Today&apos;s attention</p>
-            <h2 id="attention-title">
-              {briefing.attention.length
-                ? "Start with these opportunities"
-                : "Nothing needs immediate attention"}
-            </h2>
-          </div>
-          {briefing.totalJobs > 0 && (
-            <Link className="text-button briefing-link" href="/review">
-              Review queue <span aria-hidden="true">→</span>
+      {today.startHere.length > 0 && (
+        <section className="today-section" aria-labelledby="today-start">
+          <div className="today-section-head">
+            <h2 id="today-start">Start here</h2>
+            <Link className="text-button" href="/review">
+              Review all <span aria-hidden="true">→</span>
             </Link>
-          )}
-        </div>
-
-        {briefing.attention.length ? (
-          <div className="attention-list">
-            {briefing.attention.map((job) => {
-              const tier = job.tier;
-              return (
-              <article className="attention-card" key={job.id}>
-                <div className="attention-score">
-                  <div className={`score score-${tierTone(tier)}`}>
-                    <strong>{job.score}</strong><span>match</span>
-                  </div>
-                  <span>{tier} · {job.confidence}% match confidence</span>
-                </div>
-                <div className="attention-copy">
-                  <p className="attention-status">{job.status}</p>
-                  <h3>{job.title}</h3>
-                  <strong className="attention-company">{job.company}</strong>
-                  <p className="attention-meta">{job.remoteStatus} · {job.location}</p>
-                  <p className="attention-summary">{job.matchReason}</p>
-                  {job.concerns[0] && <p className="attention-concern"><span>Primary concern</span>{job.concerns[0]}</p>}
-                </div>
-                <div className="attention-action">
-                  <span>{job.compensation}</span>
-                  <Link href={`/jobs/${job.id}`} aria-label={`Review ${job.title} at ${job.company}`}>
-                    Review opportunity <span aria-hidden="true">→</span>
-                  </Link>
-                </div>
-              </article>
-              );
-            })}
           </div>
-        ) : (
-          <div className="briefing-empty">
-            <strong>
-              {briefing.totalJobs === 0
-                ? "No opportunities yet."
-                : "No high-priority opportunities are waiting."}
-            </strong>
-            <p>
-              {briefing.totalJobs === 0
-                ? "Set up a job source, import an opportunity, or complete your profile to get started."
-                : "Reviewed roles remain available in the Review Queue."}
-            </p>
-          </div>
-        )}
-      </section>
-
-      <div className="briefing-secondary-grid">
-        <section className="decision-summary" aria-labelledby="decisions-title">
-          <div className="briefing-section-heading compact">
-            <div><p className="eyebrow">Your judgment</p><h2 id="decisions-title">Decision summary</h2></div>
-            <Link className="text-button briefing-link" href="/review">Open queue <span aria-hidden="true">→</span></Link>
-          </div>
-          {visibleDecisionCounts.length ? (
-            <dl>
-              {visibleDecisionCounts.map((item) => (
-                <div key={item.label}><dt>{item.label}</dt><dd>{item.value}</dd></div>
-              ))}
-            </dl>
-          ) : (
-            <p className="compact-empty">No decisions are waiting right now.</p>
-          )}
-        </section>
-
-        <section className="dashboard-intelligence" aria-labelledby="dashboard-intelligence-title">
-          <div className="intelligence-summary">
-            <p className="eyebrow">Match Insights</p>
-            <strong>{readiness.percentage}%</strong>
-            <span>{readinessLabel}</span>
-          </div>
-          <div>
-            <h2 id="dashboard-intelligence-title">
-              {nextContextAction
-                ? `${nextContextAction.name} is the best next step for stronger recommendations.`
-                : "Your Job Finder profile is ready."}
-            </h2>
-            <p>
-              {nextContextAction
-                ? nextContextAction.missingInformation
-                : "Your profile has verified information across every career area."}
-            </p>
-            <Link href={nextContextAction?.href ?? "/context"} aria-label={nextContextAction ? `Continue profile setup with ${nextContextAction.name}` : "Review Job Finder"}>
-              {nextContextAction ? "Continue profile setup" : "Review Job Finder"} <span aria-hidden="true">→</span>
-            </Link>
-            <small>Career evidence remains maintained in your private local workspace.</small>
-          </div>
-        </section>
-      </div>
-
-      <section className="application-activity" aria-labelledby="activity-title">
-        <div className="briefing-section-heading compact">
-          <div><p className="eyebrow">Application activity</p><h2 id="activity-title">Your active pipeline</h2></div>
-        </div>
-        {applicationsInProgress.length ? (
-          <ul>
-            {applicationsInProgress.slice(0, 6).map((application) => (
-              <li key={application.id}>
-                <span className="application-state">{application.status}</span>
-                <div><strong>{application.role}</strong><span>{application.company}</span>{applicationAttentionStates({ status: application.status, lastActivityAt: application.timeline[0]?.eventAt ?? application.updatedAt, followUps: application.followUps, interviews: application.interviews, dismissed: application.attentionDismissals.map((item) => item.attentionType) })[0] && <small className="dashboard-attention">{applicationAttentionStates({ status: application.status, lastActivityAt: application.timeline[0]?.eventAt ?? application.updatedAt, followUps: application.followUps, interviews: application.interviews, dismissed: application.attentionDismissals.map((item) => item.attentionType) })[0].label}</small>}</div>
-                <Link href={`/applications/${application.id}`} aria-label={`View application activity for ${application.role} at ${application.company}`}>View application <span aria-hidden="true">→</span></Link>
-              </li>
+          <OpportunityList>
+            {today.startHere.map((opportunity) => (
+              <OpportunityRowView key={opportunity.id} opportunity={opportunity} density="compact" />
             ))}
-          </ul>
-        ) : (
-          <div className="activity-empty"><strong>No active applications yet.</strong><p>Begin from an opportunity when you are ready to prepare an application.</p></div>
-        )}
-      </section>
+          </OpportunityList>
+        </section>
+      )}
 
-      {briefing.totalJobs === 0 && (
-        <div className="empty-state-actions">
-          <Link className="primary-button button-link" href="/sources">Set up job sources</Link>
-          <Link className="secondary-button button-link" href="/import">Import a job</Link>
-          <Link className="text-button" href="/getting-started">Complete your profile →</Link>
-        </div>
+      {/* A quiet strip, not a card grid. Each line is a decision the user could
+          act on; a line with nothing behind it is simply absent. */}
+      {(today.attention.length > 0 || today.decided.applied > 0 || today.decided.saved > 0 || lastChecked) && (
+        <section className="today-strip" aria-label="Other things to know">
+          {today.attention.map((item) => (
+            <Link key={item.id} className="today-strip-item is-action" href={item.href}>
+              {item.label}
+            </Link>
+          ))}
+          {/* Sourced from recorded decisions rather than the Application table,
+              which is empty. Showing "0 applications" beside four applied
+              decisions would be the product contradicting itself.
+              Linked now that Opportunities filters by decision state; UX-2 left
+              these as plain text because no destination could honour them.
+              UX-4 owns the application lifecycle. */}
+          {/* Applications owns the lifecycle, so this lands there rather than
+              on the Opportunities filter UX-3 pointed it at. */}
+          {today.decided.applied > 0 && (
+            <Link className="today-strip-item" href="/applications">
+              {COUNT_LABEL.applied(today.decided.applied)}
+            </Link>
+          )}
+          {today.decided.saved > 0 && (
+            <Link className="today-strip-item" href="/review?state=saved">
+              {COUNT_LABEL.saved(today.decided.saved)}
+            </Link>
+          )}
+          {/* Was "Profile 49% complete". UX-6 removed that percentage from the
+              profile itself — it counted context documents rather than
+              describing a career — and a link promising a number the
+              destination no longer shows is worse than no link. This states
+              the one thing the profile would actually ask you to do. */}
+          {profileGaps > 0 && (
+            <Link className="today-strip-item" href="/context">
+              {profileGaps === 1 ? "1 profile gap" : `${profileGaps} profile gaps`}
+            </Link>
+          )}
+          {lastChecked && (
+            /* The only discovery fact that changes a daily decision: whether
+               what you are looking at is current. */
+            <span className="today-strip-item is-quiet">Last checked {lastChecked}</span>
+          )}
+        </section>
+      )}
+
+      {today.newToday.length > 0 && (
+        <section className="today-section" aria-labelledby="today-new">
+          <div className="today-section-head">
+            <h2 id="today-new">Also new today</h2>
+            <Link className="text-button" href="/review">
+              View opportunities <span aria-hidden="true">→</span>
+            </Link>
+          </div>
+          <OpportunityList>
+            {today.newToday.map((opportunity) => (
+              <OpportunityRowView key={opportunity.id} opportunity={opportunity} density="compact" />
+            ))}
+          </OpportunityList>
+        </section>
+      )}
+
+      {empty && (
+        <section className="today-section">
+          <p className="today-quiet">
+            No opportunities have been discovered yet.{" "}
+            <Link href="/scan">Run a scan</Link> to start finding roles.
+          </p>
+        </section>
+      )}
+
+      {!empty && counts.needsReview === 0 && (
+        <section className="today-section">
+          <p className="today-quiet">
+            Nothing is waiting on a decision. <Link href="/review">Browse everything found</Link>.
+          </p>
+        </section>
       )}
     </WorkspaceLayout>
   );

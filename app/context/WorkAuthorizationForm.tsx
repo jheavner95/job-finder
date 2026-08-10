@@ -18,12 +18,12 @@ export function WorkAuthorizationForm({ facts }: { facts: CandidateEligibilityFa
     <section className="career-section work-authorization" id="work-authorization">
       <div className="career-section-heading">
         <div>
-          <p className="eyebrow">Eligibility · does not affect your match scores</p>
-          <h2>Work authorization</h2>
+          <h2>Where you can work</h2>
         </div>
         <p>
-          Used only to flag postings that state a requirement you cannot meet. Leave it blank and
-          those postings are marked for your review instead.
+          Job Finder never guesses at citizenship or immigration status. Tell it which countries
+          you are authorised to work in and it will set aside postings that ask for something you
+          cannot meet. Leave it blank and those postings are flagged for you to check yourself.
         </p>
       </div>
 

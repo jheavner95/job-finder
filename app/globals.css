@@ -88,7 +88,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .sidebar nav { display: grid; gap: 6px; }
 .nav-groups { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 .nav-group { display: grid; gap: 3px; }
-.nav-group + .nav-group { margin-top: 8px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.07); }
+/* The boundary. Everything below the rule is machinery. */
+.nav-group-separated { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.10); }
 .nav-group-toggle { width: 100%; min-height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 3px 11px; border: 0; background: transparent; color: #758b80; cursor: pointer; text-transform: uppercase; letter-spacing: .14em; font-size: var(--text-label); font-weight: 800; text-align: left; }
 .nav-group-toggle:hover { color: #b8c8c0; }
 .nav-group-toggle i { color: #698077; font-style: normal; font-size: var(--text-label); }
@@ -2470,3 +2471,317 @@ button, .primary-button, .secondary-button, .text-button { font-size: var(--text
 .insufficient-evidence-note strong { color: var(--ink); }
 .opportunity-score-unmeasured strong { color: var(--muted); }
 .opportunity-score-unmeasured small { font-style: italic; color: var(--muted); }
+
+/* ---------------------------------------------------------------
+   Shared opportunity representation
+   One grammar at three densities. Title leads, fit is the single
+   dominant signal, ordinary facts are typography rather than
+   badges, and only exceptions are allowed colour.
+   --------------------------------------------------------------- */
+
+.opp-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--white); overflow: hidden; }
+.opp-list > .opp-row + .opp-row { border-top: 1px solid var(--line); }
+
+.opp-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  transition: background .12s ease;
+}
+.opp-row:hover { background: var(--surface-subtle); }
+.opp-row-default { padding: var(--space-4); }
+.opp-row-feature { padding: var(--space-5) var(--space-6); gap: var(--space-6); }
+
+.opp-main { display: grid; gap: 2px; min-width: 0; color: inherit; text-decoration: none; }
+.opp-identity { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+
+.opp-title {
+  margin: 0; font-size: var(--text-body); font-weight: 700; line-height: 1.25; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.opp-row-feature .opp-title { font-size: var(--text-card-title); white-space: normal; }
+.opp-company { color: var(--green); font-size: var(--text-body-small); font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+
+/* Ordinary metadata: one quiet line, dot-separated, absences omitted. */
+.opp-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); color: var(--muted); font-size: var(--text-body-small); min-width: 0; }
+.opp-meta > span { white-space: nowrap; }
+.opp-meta > span + span::before { content: "·"; margin-right: var(--space-2); color: var(--line); }
+.opp-age { font-variant-numeric: tabular-nums; }
+.opp-status { color: var(--green); font-weight: 700; }
+.opp-reason { color: var(--faint); font-size: var(--text-body-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Fit is the one signal allowed to dominate. */
+.opp-signals { display: flex; align-items: center; gap: var(--space-3); justify-content: flex-end; flex-shrink: 0; }
+.opp-fit { display: flex; align-items: baseline; gap: var(--space-2); }
+.opp-fit b { font-size: var(--text-body-large); font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+.opp-fit > span { font-size: var(--text-body-small); font-weight: 700; white-space: nowrap; }
+.opp-fit-strong b, .opp-fit-strong > span { color: var(--forest); }
+.opp-fit-possible b, .opp-fit-possible > span { color: var(--ink); }
+.opp-fit-low b, .opp-fit-low > span { color: var(--muted); }
+.opp-fit-unmeasured b, .opp-fit-unmeasured > span { color: var(--muted); font-style: italic; }
+
+/* Exceptions only. A role with nothing wrong shows nothing here. */
+.opp-exceptions { display: flex; align-items: center; gap: var(--space-2); }
+.opp-flag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px var(--space-2); border-radius: var(--radius-pill);
+  font-size: var(--text-caption); font-weight: 700; white-space: nowrap;
+}
+.opp-flag i { font-style: normal; font-weight: 800; }
+.opp-flag-warning { background: var(--warning-soft); color: var(--warning); }
+.opp-flag-blocked { background: var(--danger-soft); color: var(--danger); }
+.opp-flag-quiet { background: var(--paper); color: var(--muted); }
+
+.opp-row-blocked { background: var(--danger-soft); }
+.opp-row-blocked:hover { background: var(--danger-soft); }
+.opp-row-blocked .opp-title { text-decoration: line-through solid rgb(143 52 45 / 40%); }
+
+/* The feature density stacks rather than crowding a single line. */
+.opp-row-feature { grid-template-columns: minmax(0, 1fr) auto; }
+.opp-row-feature .opp-reason { white-space: normal; }
+
+/* ---------------------------------------------------------------
+   Today — the daily decision brief
+   Orientation, then the shortlist, then everything else. The old
+   dashboard spent its first 400px on a greeting, five tiles (four
+   permanently zero) and a status band before the first role.
+   --------------------------------------------------------------- */
+
+.today-page { display: flex; flex-direction: column; gap: var(--space-5); }
+
+.today-header { display: grid; gap: 2px; }
+.today-greeting { color: var(--muted); font-size: var(--text-label); text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
+.today-header h1 { margin: 0; font-size: var(--text-section); line-height: 1.1; }
+.today-state { color: var(--muted); font-size: var(--text-body); }
+.today-state strong { color: var(--ink); font-weight: 700; }
+
+.today-section { display: grid; gap: var(--space-2); }
+.today-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); }
+.today-section-head h2 { margin: 0; font-size: var(--text-body-large); }
+
+/* Secondary facts as one quiet line, not a grid of cards. */
+.today-strip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.today-strip-item {
+  display: inline-flex; align-items: center;
+  padding: 2px var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--white); color: var(--ink);
+  font-size: var(--text-body-small); text-decoration: none; white-space: nowrap;
+}
+a.today-strip-item:hover { border-color: var(--green); color: var(--green); }
+.today-strip-item.is-action { border-color: var(--warning); background: var(--warning-soft); color: var(--warning); font-weight: 700; }
+.today-strip-item.is-quiet { border-color: transparent; background: transparent; color: var(--muted); padding-left: 0; }
+
+.today-quiet { color: var(--muted); }
+.opp-grouped { color: var(--green); font-weight: 700; }
+
+/* ---------------------------------------------------------------
+   Opportunities — the comprehensive working set
+   Two rows of controls, then the list. The old queue spent 287px
+   on chrome and then rendered all 363 rows: 29 screens.
+   --------------------------------------------------------------- */
+
+.opportunities-page { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.opp-controls { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+
+/* Primary: what have I decided about this? */
+.opp-states { display: flex; gap: 2px; padding: 2px; background: var(--paper); border-radius: var(--radius-md); }
+.opp-states a {
+  display: inline-flex; align-items: baseline; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
+  color: var(--muted); font-size: var(--text-body-small); font-weight: 700; text-decoration: none;
+}
+.opp-states a:hover { color: var(--ink); }
+.opp-states a.is-selected { background: var(--white); color: var(--ink); box-shadow: var(--shadow-sm); }
+.opp-states a > span { color: var(--faint); font-variant-numeric: tabular-nums; font-weight: 400; }
+.opp-states a.is-selected > span { color: var(--green); }
+
+.opp-search { display: flex; gap: var(--space-2); }
+.opp-search input { min-width: 260px; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-md); font-size: var(--text-body-small); }
+.opp-search button { padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--white); font-size: var(--text-body-small); font-weight: 700; cursor: pointer; }
+
+/* Secondary: a lens, one at a time. */
+.opp-refine { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.opp-refine-group, .opp-sort { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+.opp-sort { color: var(--faint); font-size: var(--text-caption); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+.opp-refine a {
+  display: inline-flex; align-items: baseline; gap: var(--space-1);
+  color: var(--muted); font-size: var(--text-body-small); text-decoration: none;
+  border-bottom: 2px solid transparent; padding-bottom: 1px;
+}
+.opp-refine a:hover { color: var(--ink); }
+.opp-refine a.is-selected { color: var(--forest); font-weight: 700; border-bottom-color: var(--forest); }
+.opp-refine a > span { color: var(--faint); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+
+/* A heading, so the row headings below it are not orphaned at h3 and screen
+   readers can jump to the results. Sized as the caption it looks like. */
+.opp-result-line { color: var(--muted); font-size: var(--text-body-small); font-weight: 400; }
+.opp-result-line strong { color: var(--ink); }
+.opp-clear { margin-left: var(--space-3); }
+.opp-rejected { color: var(--warning); font-size: var(--text-body-small); }
+.opp-none { color: var(--muted); }
+.opp-more { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-2); }
+.opp-more span { color: var(--faint); font-size: var(--text-body-small); }
+
+/* ------------------------------------------------------------------ *
+ * Applications (UX-4)
+ *
+ * Deliberately the same grammar as an opportunity row: an application is the
+ * same role seen later, so it should not look like a different species of
+ * object. The one difference is the right-hand column, which carries
+ * application state where an opportunity carries fit.
+ * ------------------------------------------------------------------ */
+.app-states { display: flex; gap: 2px; margin-bottom: var(--space-4); padding: 2px; background: var(--paper); border-radius: var(--radius-md); width: fit-content; }
+.app-states a {
+  display: inline-flex; align-items: baseline; gap: var(--space-2);
+  padding: var(--space-2) var(--space-4); border-radius: calc(var(--radius-md) - 2px);
+  color: var(--muted); font-size: var(--text-body-small); font-weight: 700; text-decoration: none;
+}
+.app-states a:hover { color: var(--ink); }
+.app-states a.is-selected { background: var(--white); color: var(--ink); box-shadow: var(--shadow-sm); }
+.app-states a > span { color: var(--faint); font-variant-numeric: tabular-nums; font-weight: 400; }
+.app-states a.is-selected > span { color: var(--green); }
+
+.app-stale { margin: 0 0 var(--space-3); color: var(--warning); font-size: var(--text-body-small); }
+.app-result-line { margin: 0 0 var(--space-3); color: var(--muted); font-size: var(--text-body-small); font-weight: 400; }
+.app-none { color: var(--muted); }
+
+.app-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--white); overflow: hidden; }
+.app-list > li + li { border-top: 1px solid var(--line); }
+
+.app-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  transition: background .12s ease;
+}
+.app-row:hover { background: var(--surface-subtle); }
+.app-main { display: grid; gap: 2px; min-width: 0; color: inherit; text-decoration: none; }
+.app-identity { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+.app-role {
+  margin: 0; font-size: var(--text-body); font-weight: 700; line-height: 1.25; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.app-company { color: var(--green); font-size: var(--text-body-small); font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+.app-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); color: var(--muted); font-size: var(--text-body-small); min-width: 0; }
+.app-meta > span { white-space: nowrap; }
+.app-meta > span + span::before { content: "\00b7"; margin-right: var(--space-2); color: var(--line); }
+
+.app-status { display: grid; justify-items: end; gap: 2px; text-align: right; }
+/* --muted, not --faint: --faint measures 4.19:1 on paper and this line
+   carries the date, which is information rather than decoration. */
+.app-when { color: var(--muted); font-size: var(--text-body-small); white-space: nowrap; }
+.app-when b { color: var(--warning); font-weight: 700; }
+
+/* State reads as a word first; the tint only reinforces it. */
+.app-state { font-size: var(--text-body-small); font-weight: 700; white-space: nowrap; }
+.app-state-applied { color: var(--muted); }
+.app-state-interviewing { color: var(--green); }
+.app-state-offer { color: var(--forest); }
+.app-state-closed { color: var(--muted); }
+
+.opportunity-application { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-body-small); }
+.app-rejected { margin: 0 0 var(--space-3); color: var(--warning); font-size: var(--text-body-small); }
+
+/* ------------------------------------------------------------------ *
+ * System (UX-5)
+ *
+ * Part of Job Finder, denser than Today. The overview stays quiet when the
+ * engine is healthy; detail lives one click away on its own pages rather than
+ * being poured onto the landing page.
+ * ------------------------------------------------------------------ */
+/* Aligned with the workspace column, not centred in the viewport. */
+.system-workspace { padding-top: var(--space-6); margin-inline: clamp(32px, 3vw, 48px); }
+.system-workspace > .page.workspace-layout { margin-inline: 0; padding-top: var(--space-4); }
+.system-nav { display: flex; gap: 2px; padding: 2px; background: var(--paper); border-radius: var(--radius-md); width: fit-content; }
+.system-nav a {
+  display: inline-flex; align-items: center;
+  padding: var(--space-2) var(--space-4); border-radius: calc(var(--radius-md) - 2px);
+  color: var(--muted); font-size: var(--text-body-small); font-weight: 700; text-decoration: none;
+}
+.system-nav a:hover { color: var(--ink); }
+.system-nav a.is-selected { background: var(--white); color: var(--ink); box-shadow: var(--shadow-sm); }
+
+.system-verdict { margin-bottom: var(--space-5); padding: var(--space-4) var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--white); }
+.system-verdict h2 { display: flex; align-items: center; gap: var(--space-3); margin: 0; font-size: var(--text-card-title); font-weight: 700; }
+.system-verdict p { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-body-small); }
+.system-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
+/* Colour reinforces the word; it never carries the state alone. */
+.system-verdict-healthy .system-dot { background: var(--green); }
+.system-verdict-attention .system-dot { background: var(--warning); }
+.system-verdict-failing .system-dot { background: var(--danger); }
+.system-verdict-never-run .system-dot { background: var(--faint); }
+
+.system-block { margin-bottom: var(--space-5); }
+.system-block h2 { margin: 0 0 var(--space-2); font-size: var(--text-body); font-weight: 700; }
+.system-block p { margin: 0; color: var(--muted); font-size: var(--text-body-small); }
+.system-quiet { color: var(--muted); font-size: var(--text-body-small); }
+.system-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.system-failures { display: flex; flex-direction: column; margin: 0 0 var(--space-2); padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--white); overflow: hidden; }
+.system-failures li { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-4); font-size: var(--text-body-small); }
+.system-failures li + li { border-top: 1px solid var(--line); }
+.system-failures strong { text-transform: capitalize; }
+.system-failures span { color: var(--muted); }
+
+/* Companies (UX-5): one watchlist, searched and paged rather than scrolled. */
+.companies-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-bottom: var(--space-5); }
+.companies-summary { margin: 0; margin-right: auto; color: var(--muted); font-size: var(--text-body-small); }
+.companies-summary strong { color: var(--ink); }
+.companies-search { display: flex; gap: var(--space-2); }
+.companies-search input { min-width: 220px; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--white); font-size: var(--text-body-small); }
+.companies-search button { padding: var(--space-2) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--white); font-size: var(--text-body-small); font-weight: 700; cursor: pointer; }
+.companies-more { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-4); }
+.companies-more span { color: var(--muted); font-size: var(--text-body-small); }
+.companies-none { color: var(--muted); font-size: var(--text-body-small); }
+.app-insights-link { margin: 0 0 var(--space-3); font-size: var(--text-body-small); }
+.provider-results-summary dl { display: flex; flex-wrap: wrap; gap: var(--space-6); margin: 0 0 var(--space-4); }
+.provider-results-summary dl div { display: grid; gap: 2px; }
+.provider-results-summary dt { order: 2; color: var(--muted); font-size: var(--text-body-small); }
+.provider-results-summary dd { margin: 0; font-size: var(--text-card-title); font-weight: 700; font-variant-numeric: tabular-nums; }
+.provider-results-summary p { margin: 0; color: var(--muted); font-size: var(--text-body-small); }
+.companies-quiet { margin-top: var(--space-5); color: var(--muted); font-size: var(--text-body-small); }
+
+/* ------------------------------------------------------------------ *
+ * Your Profile (UX-6)
+ *
+ * A profile, not a control panel. The summary answers the four questions in
+ * one viewport; editing sits below it in the order a person changes things;
+ * read-only and low-frequency material is disclosed, not displayed.
+ * ------------------------------------------------------------------ */
+.profile-summary { margin-bottom: var(--space-6); padding: var(--space-4) var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--white); }
+.profile-summary dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-4) var(--space-5); margin: 0; }
+.profile-summary dt { margin-bottom: 2px; color: var(--muted); font-size: var(--text-body-small); }
+.profile-summary dd { margin: 0; font-size: var(--text-body); font-weight: 700; line-height: 1.3; }
+/* Derived values are marked in words, never by colour alone. */
+.profile-summary dd em, .level-derived dd em { display: block; color: var(--muted); font-size: var(--text-body-small); font-style: normal; font-weight: 400; }
+.profile-derived { color: var(--muted); font-style: normal; font-weight: 400; }
+
+.profile-gaps { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); margin: var(--space-4) 0 0; padding-top: var(--space-4); border-top: 1px solid var(--line); font-size: var(--text-body-small); }
+.profile-gaps strong { font-weight: 700; }
+/* Ordinary incompleteness is not an error; only a material gap is emphasised. */
+.profile-gaps.is-material strong { color: var(--warning); }
+
+.profile-form { display: grid; gap: var(--space-3); max-width: 640px; }
+.profile-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.profile-form label { display: grid; gap: var(--space-2); font-size: var(--text-body-small); font-weight: 700; }
+.profile-form input, .profile-form select { padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--white); font-size: var(--text-body); font-weight: 400; }
+.profile-help { margin: 0; color: var(--muted); font-size: var(--text-body-small); }
+
+.profile-evidence { display: grid; gap: var(--space-3); margin: 0 0 var(--space-4); padding: 0; list-style: none; }
+.profile-evidence li { display: grid; gap: 2px; }
+.profile-evidence strong { font-size: var(--text-body-small); }
+.profile-evidence span { color: var(--ink); font-size: var(--text-body-small); }
+.profile-evidence small { color: var(--muted); font-size: var(--text-body-small); }
+
+.profile-improve { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.profile-improve li { display: grid; gap: 2px; }
+.profile-improve span { color: var(--muted); font-size: var(--text-body-small); }
+
+.profile-more { margin-top: var(--space-6); }
+.profile-more summary { color: var(--muted); font-size: var(--text-body-small); font-weight: 700; cursor: pointer; }
+.profile-more ul { display: grid; gap: var(--space-3); margin: var(--space-4) 0 0; padding: 0; list-style: none; }
+.profile-more li { display: grid; gap: 2px; }
+.profile-more span { color: var(--muted); font-size: var(--text-body-small); }
+.profile-form button { justify-self: start; }
+.project-missing { margin: 0 0 var(--space-3); color: var(--muted); font-size: var(--text-body-small); }
+.evidence-summary { margin: 0 0 var(--space-6); color: var(--muted); font-size: var(--text-body-small); }

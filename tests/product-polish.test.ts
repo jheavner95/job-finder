@@ -30,17 +30,19 @@ describe("product polish contracts", () => {
 
   it("provides independent loading and error states for primary workspaces", () => {
     for (const route of [
-      "briefing",
+      // UX-5 moved the operational workspaces under System; redirect stubs at
+      // the old paths inherit the root boundary and need none of their own.
       "evidence",
       "getting-started",
-      "import",
-      "notifications",
-      "reports",
       "review",
-      "searches",
       "sources",
+      "system",
+      "system/activity",
+      "system/import",
+      "system/schedules",
+      "system/sources",
     ]) {
-      expect(readFileSync(`app/${route}/loading.tsx`, "utf8")).toMatch(/loading|WorkspaceSkeleton/);
+      expect(readFileSync(`app/${route}/loading.tsx`, "utf8")).toMatch(/loading|skeleton/i);
       expect(readFileSync(`app/${route}/error.tsx`, "utf8")).toContain("../error");
     }
   });
@@ -49,7 +51,7 @@ describe("product polish contracts", () => {
     const button = readFileSync("app/components/SubmitButton.tsx", "utf8");
     expect(button).toContain("useFormStatus");
     expect(button).toContain("aria-busy");
-    for (const page of ["sources", "searches", "notifications", "evidence"]) {
+    for (const page of ["sources", "system/schedules", "system/activity", "evidence"]) {
       expect(readFileSync(`app/${page}/page.tsx`, "utf8")).toContain("SubmitButton");
     }
   });

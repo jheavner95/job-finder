@@ -12,6 +12,7 @@ function job(
     id,
     score,
     status,
+    decisions: [],
     title: `Role ${id}`,
     company: "Example",
     companyInitials: "EX",
@@ -67,7 +68,7 @@ describe("dashboard presentation", () => {
       "possible-low",
     ]);
     expect(result.briefing.detail).toBe("No strong match is currently available.");
-    expect(result.primaryAction?.label).toBe("Open review queue");
+    expect(result.primaryAction?.label).toBe("Open Opportunities");
   });
 
   it("selects a calm foundational state for an empty database", () => {

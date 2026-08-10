@@ -95,7 +95,7 @@ export function ImportJobsForm() {
               <p>
                 {state.duplicate
                   ? `${state.duplicate.title} at ${state.duplicate.company} will be updated with a new import event and evaluation. Its original record will not be overwritten.`
-                  : "A new opportunity will be created and added to the Review Queue."}
+                  : "A new opportunity will be created and added to Opportunities."}
               </p>
             </div>
             <dl className="normalized-preview">

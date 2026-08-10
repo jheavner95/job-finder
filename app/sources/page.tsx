@@ -83,7 +83,7 @@ export default async function SourcesPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const params = await searchParams;
-  const [connectors, recentRuns, comparisons] = await Promise.all([
+  const [unsortedConnectors, recentRuns, comparisons, openByCompany] = await Promise.all([
     prisma.companyConnector.findMany({
       orderBy: { company: "asc" },
       include: {
@@ -100,18 +100,65 @@ export default async function SourcesPage({
       orderBy: { createdAt: "desc" },
       take: 250,
     }),
+    /*
+     * Opportunities per company, in the product's own units.
+     *
+     * The card used to lead with "public jobs", the raw posting count the
+     * provider returned. That is the engine's measure of a board, not the
+     * user's reason to keep following a company.
+     */
+    prisma.job.groupBy({
+      by: ["companyId"],
+      where: { isSynthetic: false, closedAt: null },
+      _count: { _all: true },
+    }),
   ]);
+  const companyIdByName = new Map(
+    (await prisma.company.findMany({ select: { id: true, name: true } })).map((company) => [
+      company.name.toLowerCase(),
+      company.id,
+    ]),
+  );
+  const openCount = new Map(openByCompany.map((row) => [row.companyId, row._count._all]));
+  const opportunitiesFor = (company: string) =>
+    openCount.get(companyIdByName.get(company.toLowerCase()) ?? "") ?? 0;
+
+  /*
+   * Ordered by what each company is producing, not by its name.
+   *
+   * Alphabetical order put `3Cloud`, `4lu44n1n37w012k` and `66degrees` — all
+   * with zero opportunities, one of them an unresolved board token — at the
+   * top of a 403-company watchlist, while AlphaSense and its seven roles sat
+   * hundreds of rows down. A watchlist should open on the companies that are
+   * actually hiring you.
+   */
+  const allConnectors = [...unsortedConnectors].sort((left, right) => {
+    const difference = opportunitiesFor(right.company) - opportunitiesFor(left.company);
+    return difference !== 0 ? difference : left.company.localeCompare(right.company);
+  });
+
+  /*
+   * Search and page, because 403 companies rendered as 403 cards produced a
+   * 130,060px page — 144 screens. Following a company is a decision you make
+   * once; finding one again is a search, not a scroll.
+   */
+  const query = (params.q ?? "").trim();
+  const filtered = query
+    ? allConnectors.filter((connector) =>
+        connector.company.toLowerCase().includes(query.toLowerCase()),
+      )
+    : allConnectors;
+  const attentionOnly = params.show === "attention";
+  const matching = attentionOnly
+    ? filtered.filter((connector) => companyHealth(connector).className !== "healthy")
+    : filtered;
+  const pageSize = Number(params.limit) > 0 ? Math.min(Number(params.limit), 500) : 25;
+  const connectors = matching.slice(0, pageSize);
   const providerNames = new Map(
     jobSourceRegistry.list().map((provider) => [provider.id, provider.name]),
   );
-  const latestBatchId = recentRuns.find((run) => run.batchId)?.batchId;
-  const lastScanRuns = latestBatchId
-    ? recentRuns.filter((run) => run.batchId === latestBatchId)
-    : recentRuns.slice(0, connectors.length || 1);
-  const health = connectors.map(companyHealth);
-  const validationRuns = recentRuns.filter((run) =>
-    run.status.toLowerCase().includes("validation"),
-  );
+  const health = allConnectors.map(companyHealth);
+  const needAttention = health.filter((item) => item.className !== "healthy").length;
   const lastScan = recentRuns.find((run) => run.completedAt)?.completedAt;
 
   return (
@@ -141,32 +188,43 @@ export default async function SourcesPage({
         </div>
       )}
 
-      <section className="company-discovery-hero" aria-labelledby="discovery-overview-title">
-        <div className="company-overview-heading">
-          <div>
-            <p className="eyebrow">Discovery overview</p>
-            <h2 id="discovery-overview-title">Your company watchlist</h2>
-            <p>Career platforms and public endpoints are handled automatically.</p>
-          </div>
-          <div className="company-overview-actions">
-            <a className="primary-button button-link" href="#add-company">Add Company</a>
-            <Link className="secondary-button button-link" href="/scan">Scan Jobs</Link>
-            <Link className="text-button" href="/scan#schedule">Manage Schedule</Link>
-          </div>
-        </div>
-        <dl className="company-overview-metrics">
-          <div><dt>Companies followed</dt><dd>{connectors.length}</dd></div>
-          <div><dt>Companies healthy</dt><dd>{health.filter((item) => item.className === "healthy").length}</dd></div>
-          <div><dt>Need attention</dt><dd>{health.filter((item) => ["warning", "blocked"].includes(item.className)).length}</dd></div>
-          <div><dt>Jobs discovered</dt><dd>{lastScanRuns.reduce((sum, run) => sum + run.jobsDiscovered, 0)}</dd><small>Last scan</small></div>
-          <div><dt>New opportunities</dt><dd>{lastScanRuns.reduce((sum, run) => sum + run.jobsImported, 0)}</dd><small>Last scan</small></div>
-          <div><dt>Last scan</dt><dd className="metric-time">{relativeTime(lastScan)}</dd></div>
-        </dl>
-      </section>
+      {/*
+       * One line where six metrics used to be.
+       *
+       * "Jobs discovered 162 · New opportunities 1 · Last scan" mixed the
+       * engine's posting counts with the product's opportunity vocabulary and
+       * repeated what System now owns. What a person needs here is how many
+       * companies they follow and whether any of them stopped working.
+       */}
+      <div className="companies-controls">
+        {/* The heading below carries the total; this line carries the health. */}
+        <p className="companies-summary">
+          {needAttention === 0 ? (
+            <strong>All responding</strong>
+          ) : (
+            <Link href="/sources?show=attention">{needAttention} not responding</Link>
+          )}
+          <span aria-hidden="true"> · </span>
+          checked {relativeTime(lastScan).toLowerCase()}
+        </p>
+        <form className="companies-search" action="/sources">
+          <label className="sr-only" htmlFor="companies-q">Search companies</label>
+          <input id="companies-q" name="q" defaultValue={query} placeholder="Search companies" />
+          <button type="submit">Search</button>
+        </form>
+        <a className="secondary-button button-link" href="#add-company">Add company</a>
+      </div>
 
       <section className="followed-companies" aria-labelledby="followed-companies-title">
         <div className="sources-section-heading">
-          <div><p className="eyebrow">Followed companies</p><h2 id="followed-companies-title">Companies you monitor</h2></div>
+          <div>
+            <h2 id="followed-companies-title">
+              {matching.length.toLocaleString()} {matching.length === 1 ? "company" : "companies"}
+              {query && <> matching &ldquo;{query}&rdquo;</>}
+              {attentionOnly && <> needing attention</>}
+            </h2>
+            {(query || attentionOnly) && <Link className="text-button" href="/sources">Clear</Link>}
+          </div>
           <form action={runScheduledDiscoveryAction}>
             <SubmitButton pendingLabel="Checking companies…">Run due checks</SubmitButton>
           </form>
@@ -184,18 +242,27 @@ export default async function SourcesPage({
             }
             return (
               <article className={`company-source-card company-health-${status.className}`} key={connector.id}>
+                {/*
+                 * The card face answers: who, how many opportunities, is it
+                 * working, when was it last checked. The career URL, the
+                 * schedule and the consecutive-failure counter moved into
+                 * Connection details — they describe the connector, and a
+                 * board URL under every company name made the list read like
+                 * a configuration table.
+                 */}
                 <header>
                   <div className="company-identity">
                     <span aria-hidden="true">{connector.company.slice(0, 1).toUpperCase()}</span>
-                    <div><h3>{connector.company}</h3><small>{connector.careerUrl}</small></div>
+                    <div><h3>{connector.company}</h3></div>
                   </div>
                   <span className={`company-health-pill health-${status.className}`}>{status.label}</span>
                 </header>
                 <div className="company-source-summary">
-                  <div><strong>{latest?.jobsDiscovered ?? "—"}</strong><span>public jobs</span></div>
+                  <div>
+                    <strong>{opportunitiesFor(connector.company)}</strong>
+                    <span>opportunities</span>
+                  </div>
                   <div><strong>{relativeTime(latest?.completedAt ?? connector.lastChecked)}</strong><span>last checked</span></div>
-                  <div><strong>{scheduleLabel(connector.schedule)}</strong><span>schedule</span></div>
-                  <div><strong>{consecutiveFailures}</strong><span>consecutive failures</span></div>
                 </div>
                 {error && (
                   <div className="company-warning">
@@ -278,26 +345,47 @@ export default async function SourcesPage({
                     )}
                   </details>
                 )}
+                {/*
+                  * One action on the face, three behind the disclosure.
+                  *
+                  * Every card carried View / Run Now / Validate / Pause, so a
+                  * page of 25 companies offered 100 buttons and three of every
+                  * four were maintenance. The only one that serves the daily
+                  * question — what is this company hiring for — stays.
+                  */}
                 <div className="company-card-actions">
-                  <Link className="source-run button-link" href="/review">View Jobs</Link>
-                  <form action={runProviderDiscoveryAction}>
-                    <input type="hidden" name="connectorId" value={connector.id} />
-                    <SubmitButton className="source-run" pendingLabel="Checking…" disabled={!connector.enabled} ariaLabel={`Run ${connector.company} now`}>Run Now</SubmitButton>
-                  </form>
-                  <form action={validateConnectorAction}>
-                    <input type="hidden" name="connectorId" value={connector.id} />
-                    <SubmitButton className="source-run" pendingLabel="Validating…" ariaLabel={`Validate ${connector.company}`}>Validate</SubmitButton>
-                  </form>
-                  <form action={toggleConnectorAction}>
-                    <input type="hidden" name="connectorId" value={connector.id} />
-                    <input type="hidden" name="enabled" value={connector.enabled ? "false" : "true"} />
-                    <SubmitButton className="source-run" pendingLabel="Updating…">{connector.enabled ? "Pause" : "Enable"}</SubmitButton>
-                  </form>
+                  <Link
+                    className="source-run button-link"
+                    href={`/review?state=all&q=${encodeURIComponent(connector.company)}`}
+                  >
+                    View opportunities
+                  </Link>
                 </div>
                 <details className="company-technical-details">
                   <summary>Connection details</summary>
+                  <div className="company-card-actions">
+                    <form action={runProviderDiscoveryAction}>
+                      <input type="hidden" name="connectorId" value={connector.id} />
+                      <SubmitButton className="source-run" pendingLabel="Checking…" disabled={!connector.enabled} ariaLabel={`Check ${connector.company} now`}>Check now</SubmitButton>
+                    </form>
+                    <form action={validateConnectorAction}>
+                      <input type="hidden" name="connectorId" value={connector.id} />
+                      <SubmitButton className="source-run" pendingLabel="Validating…" ariaLabel={`Validate ${connector.company}`}>Validate</SubmitButton>
+                    </form>
+                    <form action={toggleConnectorAction}>
+                      <input type="hidden" name="connectorId" value={connector.id} />
+                      <input type="hidden" name="enabled" value={connector.enabled ? "false" : "true"} />
+                      <SubmitButton className="source-run" pendingLabel="Updating…" ariaLabel={`${connector.enabled ? "Pause" : "Enable"} ${connector.company}`}>{connector.enabled ? "Pause" : "Enable"}</SubmitButton>
+                    </form>
+                  </div>
                   <dl>
                     <div><dt>Provider</dt><dd>{providerNames.get(connector.atsType) ?? connector.atsType}</dd></div>
+                    <div><dt>Career page</dt><dd>{connector.careerUrl}</dd></div>
+                    <div><dt>Schedule</dt><dd>{scheduleLabel(connector.schedule)}</dd></div>
+                    <div><dt>Public jobs on last check</dt><dd>{latest?.jobsDiscovered ?? "—"}</dd></div>
+                    {consecutiveFailures > 0 && (
+                      <div><dt>Consecutive failures</dt><dd>{consecutiveFailures}</dd></div>
+                    )}
                     <div><dt>Connection</dt><dd>{status.label}</dd></div>
                     <div><dt>Last validation</dt><dd>{dateTime(connector.lastChecked)}</dd></div>
                     <div><dt>Last successful scan</dt><dd>{dateTime(connector.lastSuccessfulFetch)}</dd></div>
@@ -321,6 +409,31 @@ export default async function SourcesPage({
             </div>
           )}
         </div>
+        {matching.length > connectors.length && (
+          <p className="companies-more">
+            <Link
+              className="secondary-button button-link"
+              href={`/sources?${new URLSearchParams({
+                ...(query ? { q: query } : {}),
+                ...(attentionOnly ? { show: "attention" } : {}),
+                limit: String(pageSize + 25),
+              })}`}
+            >
+              Show {Math.min(matching.length - connectors.length, 25)} more
+            </Link>
+            <span>
+              Showing {connectors.length} of {matching.length.toLocaleString()}
+            </span>
+          </p>
+        )}
+        {matching.length === 0 && (
+          <p className="companies-none">
+            {query
+              ? `No company matching “${query}”.`
+              : "No companies need attention."}{" "}
+            <Link href="/sources">See all companies</Link>.
+          </p>
+        )}
       </section>
 
       <section className="add-company-section" id="add-company" aria-labelledby="add-company-title">
@@ -332,40 +445,17 @@ export default async function SourcesPage({
         <AddCompanyForm />
       </section>
 
-      <section className="validation-history" aria-labelledby="validation-history-title">
-        <div className="sources-section-heading">
-          <div><p className="eyebrow">Validation results</p><h2 id="validation-history-title">Recent connection checks</h2></div>
-        </div>
-        <div className="source-history-list">
-          {validationRuns.slice(0, 6).map((run) => (
-            <article key={run.id}>
-              <div><strong>{run.connector.company}</strong><small>{dateTime(run.completedAt ?? run.startedAt)}</small></div>
-              <span className={run.failures ? "history-warning" : "history-healthy"}>{run.failures ? "Blocked" : "Verified"}</span>
-              <p>{run.failures ? safeError(run.lastError)?.message : `${run.jobsDiscovered} public jobs available`}</p>
-              <small>{run.durationMs ? `${(run.durationMs / 1000).toFixed(1)} sec` : "Response time unavailable"}</small>
-            </article>
-          ))}
-          {!validationRuns.length && <p className="history-empty">Validation history will appear after you check a company connection.</p>}
-        </div>
-      </section>
-
-      <section className="company-discovery-history" aria-labelledby="discovery-history-title">
-        <div className="sources-section-heading">
-          <div><p className="eyebrow">Discovery history</p><h2 id="discovery-history-title">What each company returned</h2></div>
-          <Link href="/scan">Open scan details →</Link>
-        </div>
-        <div className="source-history-list">
-          {recentRuns.filter((run) => !run.status.toLowerCase().includes("validation")).slice(0, 10).map((run) => (
-            <article key={run.id}>
-              <div><strong>{run.connector.company}</strong><small>{dateTime(run.completedAt ?? run.startedAt)}</small></div>
-              <span className={run.failures ? "history-warning" : "history-healthy"}>{run.failures ? "Warning" : "Healthy"}</span>
-              <p>{run.jobsDiscovered} jobs · {run.jobsImported} new · {run.duplicates} duplicates</p>
-              <small>{run.durationMs ? `${(run.durationMs / 1000).toFixed(1)} sec` : "In progress"}</small>
-            </article>
-          ))}
-          {!recentRuns.length && <p className="history-empty">Company discovery history will appear after the first scan.</p>}
-        </div>
-      </section>
+      {/*
+        * "Recent connection checks" and "What each company returned" removed
+        * by UX-5. Both were crawl logs — the same runs System reports on
+        * Activity and Scans — sitting underneath a page about which companies
+        * to follow. Companies keeps per-company health; the run-by-run history
+        * belongs to the engine.
+        */}
+      <p className="companies-quiet">
+        Crawl history and provider diagnostics live in{" "}
+        <Link href="/system">System</Link>.
+      </p>
 
       <details className="provider-information">
         <summary>

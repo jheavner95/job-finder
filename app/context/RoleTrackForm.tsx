@@ -26,23 +26,24 @@ export function RoleTrackForm({ profile }: { profile: CandidateLevelProfile }) {
     <section className="career-section role-track" id="role-track">
       <div className="career-section-heading">
         <div>
-          <p className="eyebrow">Level fit · does not affect your match scores</p>
-          <h2>Career level and track</h2>
+          {/* Was "Level fit · does not affect your match scores" — the
+              product's own architecture, stated to someone who did not ask. */}
+          <h2>Level and track</h2>
         </div>
         <p>
-          Used to flag roles that sit below or above your career level. Your level target is read
-          from the roles you already listed; only the track needs answering.
+          This helps Job Finder tell a Staff-level opportunity from one that is too junior, and a
+          role that leads a team from one that does not.
         </p>
       </div>
 
       <dl className="level-derived">
         <div>
           <dt>Target level</dt>
-          <dd>{band ? `${LEVEL_LABEL[band.min]} – ${LEVEL_LABEL[band.max]}` : "Not derivable from your preferred roles"}</dd>
+          <dd>{band ? `${LEVEL_LABEL[band.min]} – ${LEVEL_LABEL[band.max]}` : "Not set"}<em> — read from the roles you listed</em></dd>
         </div>
         <div>
           <dt>Current level</dt>
-          <dd>{LEVEL_LABEL[profile.currentLevel]}</dd>
+          <dd>{LEVEL_LABEL[profile.currentLevel]}<em> — read from your most recent résumé role</em></dd>
         </div>
         <div>
           <dt>Years of experience</dt>

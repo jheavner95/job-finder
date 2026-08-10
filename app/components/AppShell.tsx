@@ -2,59 +2,33 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 
-import { NAV_GROUPS, NAV_STORAGE_KEY } from "@/lib/navigation";
+import { NAV_GROUPS } from "@/lib/navigation";
 import { NavIcon, type NavIconName } from "./NavIcon";
 
+/**
+ * Six destinations, always visible.
+ *
+ * The sidebar used to be four collapsible groups of eleven items, with the
+ * open/closed state persisted to localStorage. Collapsing exists to manage a
+ * long list; six items are not a long list, and a navigation that remembers a
+ * shape from last week is not stable. Everything is shown, nothing toggles.
+ */
 export function AppShell({
   children,
   showGettingStarted,
 }: {
   children: React.ReactNode;
+  /** First-run onboarding, appended rather than given a permanent slot. */
   showGettingStarted: boolean;
 }) {
   const pathname = usePathname();
-  const groups = NAV_GROUPS.map((group) => group.id === "career" && showGettingStarted
-    ? {
-        ...group,
-        items: [
-          { href: "/getting-started", label: "Getting Started", icon: "flag" },
-          ...group.items,
-        ],
-      }
-    : group);
-  const activeGroup = groups.find((group) => group.items.some((item) =>
-    item.href === "/"
-      ? pathname === "/"
-      : pathname.startsWith(item.href)
-        || (item.href === "/review" && pathname.startsWith("/jobs/")),
-  ))?.id;
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(
-    Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true])),
-  );
 
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(NAV_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as Record<string, boolean>;
-        queueMicrotask(() => setExpanded((current) => ({ ...current, ...parsed })));
-      }
-    } catch {
-      // Invalid local state falls back to the fully expanded navigation.
-    }
-  }, []);
-
-  const toggleGroup = (groupId: string) => {
-    setExpanded((current) => {
-      const next = {
-        ...current,
-        [groupId]: groupId === activeGroup ? true : !current[groupId],
-      };
-      window.localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    // An opportunity detail page belongs to Opportunities, even from elsewhere.
+    if (href === "/review") return pathname.startsWith("/review") || pathname.startsWith("/jobs/");
+    return pathname === href || pathname.startsWith(`${href}/`);
   };
 
   return (
@@ -72,42 +46,37 @@ export function AppShell({
           <span><b>Job Finder</b><small>Intelligence</small></span>
         </Link>
         <nav aria-label="Primary navigation" className="nav-groups">
-          {groups.map((group) => {
-            const isExpanded = group.id === activeGroup || expanded[group.id];
-            return (
-              <section className="nav-group" key={group.id} aria-labelledby={`nav-${group.id}-label`}>
-                <button
-                  type="button"
-                  className="nav-group-toggle"
-                  aria-expanded={isExpanded}
-                  aria-controls={`nav-${group.id}-items`}
-                  onClick={() => toggleGroup(group.id)}
-                >
-                  <span id={`nav-${group.id}-label`}>{group.label}</span>
-                  <i aria-hidden="true">{isExpanded ? "−" : "+"}</i>
-                </button>
-                <div id={`nav-${group.id}-items`} hidden={!isExpanded}>
-                  {group.items.map((item) => {
-                    const active =
-                      item.href === "/"
-                        ? pathname === "/"
-                        : pathname.startsWith(item.href)
-                          || (item.href === "/review" && pathname.startsWith("/jobs/"));
-                    return (
-                      <Link
-                        key={item.href}
-                        className={active ? "nav-item active" : "nav-item"}
-                        href={item.href}
-                        aria-current={active ? "page" : undefined}
-                      >
-                        <span aria-hidden="true"><NavIcon name={item.icon as NavIconName} /></span>{item.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
+          {NAV_GROUPS.map((group) => (
+            <section
+              className={group.separated ? "nav-group nav-group-separated" : "nav-group"}
+              key={group.id}
+            >
+              {group.items.map((item) => {
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    className={active ? "nav-item active" : "nav-item"}
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    <span aria-hidden="true"><NavIcon name={item.icon as NavIconName} /></span>{item.label}
+                  </Link>
+                );
+              })}
+            </section>
+          ))}
+          {showGettingStarted && (
+            <section className="nav-group nav-group-separated">
+              <Link
+                className={isActive("/getting-started") ? "nav-item active" : "nav-item"}
+                href="/getting-started"
+                aria-current={isActive("/getting-started") ? "page" : undefined}
+              >
+                <span aria-hidden="true"><NavIcon name="flag" /></span>Getting Started
+              </Link>
+            </section>
+          )}
         </nav>
         <div className="sidebar-foot">
           <div className="profile-dot" aria-hidden="true">●</div>

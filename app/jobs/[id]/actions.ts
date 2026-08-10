@@ -58,6 +58,8 @@ export async function updateJobDecision(
     });
     revalidatePath("/");
     revalidatePath("/review");
+    // Applications are derived from these decisions, so it goes stale too.
+    revalidatePath("/applications");
     revalidatePath("/reports");
     revalidatePath(`/jobs/${job.id}`);
     return { status: "success", message: `Saved as ${parsed.data.status}.` };

@@ -5,6 +5,7 @@ import {
   tierRank,
 } from "./opportunity-tiers";
 import type { JobListItem } from "./view-models";
+import { countOpportunities } from "./opportunity-presentation";
 
 const REVIEW_STATUSES: JobListItem["status"][] = [
   "New",
@@ -67,7 +68,9 @@ export function presentDashboard<
   const strongAttentionCount = reviewable.filter(
     ({ job }) => tierOf(job) === "Excellent Fit",
   ).length;
-  const awaitingReview = reviewable.length;
+  // The headline number is the shared one, so the dashboard and the queue
+  // never describe the same pile of work with different totals.
+  const awaitingReview = countOpportunities(jobs).needsReview;
   const saved = statusCount(jobs, ["Saved"]);
   const recentlyClosed = statusCount(jobs, ["Closed", "Rejected"]);
   const activeApplications = jobs
@@ -87,7 +90,10 @@ export function presentDashboard<
         }
       : strongAttentionCount > 0
         ? {
-            title: `${strongAttentionCount} strong ${strongAttentionCount === 1 ? "opportunity is" : "opportunities are"} ready for review.`,
+            // "strong" used to mean Excellent Fit here, Excellent-or-Strong in
+            // reports, and a provider total on the discovery page — three
+            // numbers for one word. The tier is now named exactly.
+            title: `${strongAttentionCount} Excellent Fit ${strongAttentionCount === 1 ? "opportunity is" : "opportunities are"} ready for review.`,
             detail: `${Math.max(awaitingReview - strongAttentionCount, 0)} more ${Math.max(awaitingReview - strongAttentionCount, 0) === 1 ? "opportunity is" : "opportunities are"} waiting for your decision.`,
           }
         : awaitingReview > 0
@@ -107,7 +113,7 @@ export function presentDashboard<
           href: "/review?status=Strong+Match",
         }
       : awaitingReview > 0
-        ? { label: "Open review queue", href: "/review" }
+        ? { label: "Open Opportunities", href: "/review" }
         : jobs.length > 0
           ? { label: "View opportunities", href: "/review" }
           : null;

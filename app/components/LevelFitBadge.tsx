@@ -83,7 +83,8 @@ export function LevelFitPanel({
   return (
     <section className={`level-panel level-${tone}`} aria-labelledby="level-fit-title">
       <div className="level-headline">
-        <p className="eyebrow">Level fit · separate from match score</p>
+        {/* Named for what it tells you, not for where it sits in the engine. */}
+        <p className="eyebrow">Level</p>
         <h2 id="level-fit-title">{levelVerdictLabel(assessment.verdict)}</h2>
         <p>{assessment.headline}</p>
       </div>

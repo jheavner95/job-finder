@@ -240,11 +240,6 @@ function activityCopy(event: Snapshot["events"][number]) {
   return `${provider} needs attention`;
 }
 
-/** Tier arrives from the server as a plain string; only Low Relevance is held back. */
-function reviewableTier(tier: string) {
-  return tier !== "Low Relevance";
-}
-
 type Coverage = {
   employersKnown: number;
   employersAutoDiscovered: number;
@@ -276,7 +271,7 @@ export function DiscoveryWorkspace({
   const [selectedProvider, setSelectedProvider] = useState(
     providers.find((provider) => provider.configured)?.id ?? providers[0]?.id ?? "",
   );
-  const [resultTab, setResultTab] = useState("matched");
+  const [resultTab, setResultTab] = useState("results");
   const [filter, setFilter] = useState<"all" | "attention" | "configured">("all");
   const [refreshing, setRefreshing] = useState(false);
   // False for the server snapshot and the first client render, true thereafter.
@@ -365,10 +360,6 @@ export function DiscoveryWorkspace({
         lastSeenAt: snapshot?.startedAt ?? null,
       };
     });
-  const topMatches = [...liveTopMatches, ...persistedTopMatches]
-    .filter((job, index, items) => items.findIndex((item) => item.id === job.id) === index)
-    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-    .slice(0, 5);
   const displayedStrongMatches = running
     ? strongMatches + liveTopMatches.filter((job) =>
       !persistedTopMatches.some((persisted) => persisted.id === job.id)).length
@@ -481,27 +472,14 @@ export function DiscoveryWorkspace({
         </dl>
       </section>
 
-      <section className="today-matches" aria-labelledby="today-matches-title">
-        <header className="discovery-section-heading">
-          <div><p className="eyebrow">Review first</p><h2 id="today-matches-title">Today&apos;s Strong Matches</h2></div>
-          {topMatches.length > 0 && <Link href="/review">Open review queue →</Link>}
-        </header>
-        {topMatches.length > 0 ? (
-          <div className="today-match-grid">
-            {topMatches.map((job, index) => (
-              <Link href={`/jobs/${job.id}`} key={job.id} className={index === 0 ? "today-match-card is-featured" : "today-match-card"}>
-                <span className={`provider-logo logo-${job.providerId}`}>{logoMarks[job.providerId] ?? job.providerName.slice(0, 2).toUpperCase()}</span>
-                <span><small>{job.providerName} · {job.location || "Location not provided"}</small><strong>{job.title}</strong><em>{job.company}</em></span>
-                <b>{job.score}<small>match</small></b>
-                <i>Review →</i>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <DiscoveryEmpty title="No strong matches today" message="Discovery is healthy. New high-confidence opportunities will appear here as providers find them." />
-        )}
-      </section>
-
+      {/*
+        * "Today's Strong Matches" removed by UX-5.
+        *
+        * This was the third opportunity list in the product, after Today and
+        * Opportunities, and the fourth counting the Daily Briefing. All three
+        * led with the same role. A page about whether the engine is working has
+        * no business ranking jobs.
+        */}
       <section className={`discovery-queue ${running ? "is-running" : ""}`} aria-live="polite" aria-labelledby="discovery-queue-title">
         <header>
           <div><p className="eyebrow">Live operations</p><h2 id="discovery-queue-title">Discovery Queue</h2></div>
@@ -566,7 +544,7 @@ export function DiscoveryWorkspace({
                     setSelectedProvider(provider.id);
                     document.getElementById("provider-details")?.scrollIntoView({ behavior: "smooth" });
                   }}>View Results</button>
-                  <Link className="provider-configure-link" href="/sources" aria-label={`Configure ${provider.name}`}>•••</Link>
+                  <Link className="provider-configure-link" href="/system/schedules" aria-label={`Configure ${provider.name}`}>•••</Link>
                 </div>
               </article>
             );
@@ -581,7 +559,7 @@ export function DiscoveryWorkspace({
               <span className={`provider-logo logo-${selected.id}`}>{logoMarks[selected.id] ?? selected.name.slice(0, 2).toUpperCase()}</span>
               <div><p className="eyebrow">Provider details</p><h2 id="provider-detail-title">{selected.name}</h2><p>{selected.description}</p></div>
             </div>
-            <div><span className={`discovery-status status-${statusClass(selected.status)}`}><i />{selected.status}</span><Link href="/sources">Manage configuration →</Link></div>
+            <div><span className={`discovery-status status-${statusClass(selected.status)}`}><i />{selected.status}</span><Link href="/system/schedules">Manage configuration →</Link></div>
           </header>
           <div className="provider-accounting" aria-label={`${selected.name} latest discovery accounting`}>
             <div className="accounting-total">
@@ -604,40 +582,46 @@ export function DiscoveryWorkspace({
             </dl>
           </div>
           <nav className="provider-detail-tabs" aria-label={`${selected.name} results`} role="tablist">
+            {/*
+              * Four tabs of browsable, tier-ranked jobs used to live here —
+              * "Worth reviewing", "New opportunities", "Low relevance",
+              * "Closed" — which made this the third opportunity list in the
+              * product and put UX-1's decision vocabulary on an operational
+              * page. What a source page has to answer is whether the provider
+              * returned anything, which is a count.
+              */}
             {[
-              ["matched", `Worth reviewing (${selected.results.filter((job) => !job.closedAt && reviewableTier(job.tier)).length})`],
-              ["new", `New opportunities (${selected.results.filter((job) => !job.closedAt && job.isNew).length})`],
-              ["all", `Low relevance (${selected.results.filter((job) => !job.closedAt && !job.isNew && !reviewableTier(job.tier)).length})`],
-              ["closed", `Closed (${selected.closed})`],
+              ["results", "Results"],
               ["diagnostics", "Diagnostics"],
               ["history", "History"],
             ].map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={resultTab === value} onClick={() => setResultTab(value)}>{label}</button>)}
           </nav>
           <div className="provider-detail-content">
-            {(resultTab === "matched" || resultTab === "new" || resultTab === "all" || resultTab === "closed") && (
-              <div className="discovery-job-list">
-                {selected.results.filter((job) =>
-                  resultTab === "closed" ? !!job.closedAt
-                    : resultTab === "matched" ? !job.closedAt && reviewableTier(job.tier)
-                      : resultTab === "new" ? !job.closedAt && job.isNew
-                        : !job.closedAt && !job.isNew && !reviewableTier(job.tier)).map((job) => (
-                  <Link href={`/jobs/${job.id}`} key={job.id}>
-                    <span><strong>{job.title}</strong><small>{job.company} · {job.location || "Location not provided"}</small></span>
-                    <span>{job.closedAt ? "Closed" : job.score === null ? "Not scored" : `${job.tier} · ${job.score}`}<small>Seen {since(job.lastSeenAt)}</small></span>
-                    <b>Open →</b>
-                  </Link>
-                ))}
-                {!selected.results.filter((job) =>
-                  resultTab === "closed" ? !!job.closedAt
-                    : resultTab === "matched" ? !job.closedAt && reviewableTier(job.tier)
-                      : resultTab === "new" ? !job.closedAt && job.isNew
-                        : !job.closedAt && !job.isNew && !reviewableTier(job.tier)).length && (
-                  <DiscoveryEmpty
-                    title={resultTab === "closed" ? "No closed jobs" : resultTab === "new" ? "No new opportunities" : resultTab === "matched" ? "No strong matches yet" : "No other jobs to review"}
-                    message={selected.configured ? "Run this provider again to check for changes. A healthy scan can complete without finding a match." : "Configure at least one company source, then scan this provider to populate results."}
-                    action={!selected.configured ? { href: "/sources", label: "Configure provider" } : undefined}
-                  />
-                )}
+            {resultTab === "results" && (
+              <div className="provider-results-summary">
+                <dl>
+                  <div>
+                    <dt>Postings returned</dt>
+                    <dd>{selected.results.filter((job) => !job.closedAt).length}</dd>
+                  </div>
+                  <div>
+                    <dt>Still open</dt>
+                    <dd>{selected.results.filter((job) => !job.closedAt).length - selected.closed}</dd>
+                  </div>
+                  <div>
+                    <dt>No longer listed</dt>
+                    <dd>{selected.closed}</dd>
+                  </div>
+                </dl>
+                <p>
+                  {selected.results.length
+                    ? "Everything this provider found is scored and ranked in Opportunities."
+                    : selected.configured
+                      ? "This provider returned nothing on its last scan. A healthy scan can complete without finding a match."
+                      : "No company on this provider is being monitored yet."}
+                  {" "}
+                  <Link href="/review">Open Opportunities</Link>.
+                </p>
               </div>
             )}
             {resultTab === "diagnostics" && (
@@ -691,7 +675,7 @@ export function DiscoveryWorkspace({
       </section>
       <section className="discovery-history-section">
         <div className="recent-discovery-scans">
-          <header className="discovery-section-heading"><div><p className="eyebrow">Recent scans</p><h2>Discovery history</h2></div><Link href="/scan">Full history →</Link></header>
+          <header className="discovery-section-heading"><div><p className="eyebrow">Recent scans</p><h2>Discovery history</h2></div><Link href="/system/scans">Full history →</Link></header>
           {recentBatches.slice(0, 6).map((batch) => (
             <Link href={`/scan?batchId=${batch.id}`} key={batch.id}><span><strong>{dateTime(batch.startedAt)}</strong><small>{batch.trigger} · {duration(batch.durationMs)}</small></span><dl><div><dd>{batch.discovered}</dd><dt>found</dt></div><div><dd>{batch.matched}</dd><dt>matched</dt></div><div><dd>{batch.imported}</dd><dt>new</dt></div></dl><b className={batch.failures ? "history-error" : ""}>{batch.failures ? "Warnings" : batch.status}</b></Link>
           ))}

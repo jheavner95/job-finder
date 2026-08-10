@@ -6,7 +6,7 @@ export default function JobNotFound() {
       <div className="empty-state">
         <strong>Job not found</strong>
         <p>The record may have been removed or the link is invalid.</p>
-        <Link className="primary-button button-link" href="/review">Return to review queue</Link>
+        <Link className="primary-button button-link" href="/review">Back to Opportunities</Link>
       </div>
     </div>
   );

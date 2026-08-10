@@ -2,170 +2,198 @@ import Link from "next/link";
 
 import { PageHeader } from "@/app/components/PageHeader";
 import { ReadingLayout } from "@/app/components/PageLayout";
-import {
-  careerProfileTasks,
-  estimatedProfileMinutes,
-  profileQuality,
-} from "@/lib/career-profile-presentation";
-import { evaluateContextLibrary } from "@/lib/context-readiness";
 import { prisma } from "@/lib/db";
-import { getOnboardingState, strings } from "@/lib/onboarding";
-import { loadCandidateFacts } from "@/lib/eligibility/service";
-import { WorkAuthorizationForm } from "./WorkAuthorizationForm";
+import { loadProfile, type ProfileFact } from "@/lib/profile";
+
 import { RoleTrackForm } from "./RoleTrackForm";
-import { loadCandidateLevelProfile } from "@/lib/level-fit/service";
+import { TargetsForm } from "./TargetsForm";
+import { WorkAuthorizationForm } from "./WorkAuthorizationForm";
+import { WorkPreferencesForm } from "./WorkPreferencesForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function ContextPage() {
-  const readiness = await evaluateContextLibrary();
-  const eligibilityFacts = await loadCandidateFacts(prisma);
-  const levelProfile = await loadCandidateLevelProfile(prisma);
-  const onboarding = await getOnboardingState(prisma);
-  const sourceTasks = careerProfileTasks(readiness.documents);
-  const onboardingStep = onboarding?.onboarding?.currentStep ?? 1;
-  const preferences = onboarding?.careerPreferences;
-  const tasks = sourceTasks.map((task) => {
-    let status = task.status;
-    if (task.id === "master-resume" && (onboarding?.resumeEvidence.length || onboarding?.resumeImports.length)) status = "ready";
-    if (task.id === "career-profile" && (onboardingStep > 2 || onboarding?.onboarding?.completedAt)) status = "ready";
-    if (task.id === "portfolio-evidence") {
-      status = onboarding?.portfolioReadiness
-        ? onboarding.portfolioReadiness >= 80 ? "ready" : "partial"
-        : onboarding?.portfolio.length ? "template" : status;
-    }
-    if (task.id === "compensation" && preferences?.compensation) status = "ready";
-    if (task.id === "role-requirements" && strings(preferences?.preferredIndustries).length) status = "ready";
-    if (task.id === "company-preferences" && (
-      strings(preferences?.preferredRoles).length
-      || preferences?.workMode
-      || strings(preferences?.employmentTypes).length
-    )) status = "ready";
-    if (task.id === "exclusions" && strings(preferences?.companyExclusions).length) status = "ready";
-    return {
-      ...task,
-      status,
-      statusLabel: status === "ready" ? "Complete" : status === "partial" ? "In progress" : status === "template" ? "Needs review" : "Not started",
-    };
-  });
-  const incomplete = tasks.filter((task) => task.status !== "ready");
-  const completed = tasks.filter((task) => task.status === "ready");
-  const projectStatus = new Map(onboarding?.projectProgress.map((item) => [item.projectId, item.status]) ?? []);
-  const project = onboarding?.portfolio
-    .filter((item) => item.portfolioReadiness < 100 && projectStatus.get(item.id) !== "Complete")
-    .sort((left, right) => right.portfolioReadiness - left.portfolioReadiness)[0];
-  const nextTask = project
-    ? {
-        label: `Complete ${project.name} project`,
-        href: "/getting-started?step=3",
-        reason: "Adds verified project evidence that improves role, product, and industry recommendations.",
-      }
-    : incomplete[0]
-      ? {
-          label: incomplete[0].label,
-          href: incomplete[0].href,
-          reason: incomplete[0].benefit,
-        }
-      : null;
-  const remainingMinutes = estimatedProfileMinutes(tasks);
-  const quality = profileQuality(readiness.percentage);
+/**
+ * Your Profile — one place for what Job Finder knows about you.
+ *
+ * Replaces a Career Profile page that opened with "Profile strength 49%", a
+ * figure counting context documents rather than describing a career, followed
+ * by a task list, two forms, and two panels explaining the recommendation
+ * engine to its own user. The things a person actually changes — the roles they
+ * want, the industries, how they want to work, what they are paid — were not
+ * on it at all; they lived inside the first-run onboarding wizard.
+ *
+ * The order is the order of the questions: who am I targeting, how do I want to
+ * work, what may I take, what does Job Finder have on me, what should I fix.
+ */
+export default async function ProfilePage() {
+  const profile = await loadProfile(prisma);
+  const material = profile.gaps.filter((gap) => gap.material);
 
   return (
     <ReadingLayout className="career-page profile-workspace">
       <PageHeader
-        title="Career Profile"
-        subtitle="Complete the information Job Finder uses to make recommendations more relevant and explainable."
+        title="Your Profile"
+        subtitle={`What Job Finder knows about you, and what it uses to judge a role.`}
         action={<span className="privacy-badge">● Local files · private workspace</span>}
       />
 
-      <section className="profile-hero" aria-labelledby="profile-strength-title">
-        <div className="profile-strength">
-          <p className="eyebrow" id="profile-strength-title">Profile Strength</p>
-          <strong>{readiness.percentage}%</strong>
-          <span>{readiness.calibrated ? "Ready" : "In progress"}</span>
-        </div>
-        {nextTask ? (
-          <div className="profile-next-action">
-            <p className="eyebrow">Next recommended action</p>
-            <h2>{nextTask.label}</h2>
-            <dl>
-              <div><dt>Estimated time remaining</dt><dd>{remainingMinutes} minutes</dd></div>
-              <div><dt>Why?</dt><dd>{nextTask.reason}</dd></div>
-            </dl>
-            <div className="profile-hero-actions">
-              <Link className="primary-button button-link" href={nextTask.href}>Continue</Link>
-              <a className="secondary-button button-link" href="#completed-profile-items">View completed items</a>
-            </div>
+      {/* The first viewport: who you are targeting, at what level, how you want
+          to work, and whether anything important is missing. */}
+      <section className="profile-summary" aria-labelledby="profile-summary-title">
+        <h2 id="profile-summary-title" className="sr-only">
+          At a glance
+        </h2>
+        <dl>
+          <div>
+            <dt>Targeting</dt>
+            <dd>{profile.targets.roles.length ? profile.targets.roles.join(" · ") : "No roles set"}</dd>
           </div>
-        ) : (
-          <div className="profile-next-action profile-ready">
-            <p className="eyebrow">Profile ready</p>
-            <h2>Your career profile is ready.</h2>
-            <p>Job Finder has enough verified evidence to produce high-confidence recommendations.</p>
-            <Link className="primary-button button-link" href="/review">Review opportunities</Link>
+          <div>
+            <dt>Level</dt>
+            <dd>
+              {profile.targets.level.value ?? "Not set"}
+              <Derived fact={profile.targets.level} />
+            </dd>
           </div>
-        )}
-        <dl className="profile-secondary-metrics">
-          <div><dt>Evidence confidence</dt><dd>{quality}</dd></div>
-          <div><dt>Recommendation quality</dt><dd>{quality}</dd></div>
+          <div>
+            <dt>Work mode</dt>
+            <dd>{profile.work.mode ?? "No preference"}</dd>
+          </div>
+          <div>
+            <dt>Can work in</dt>
+            <dd>
+              {profile.eligibility.declared
+                ? profile.eligibility.facts?.authorizedCountries.join(", ")
+                : "Not stated"}
+            </dd>
+          </div>
         </dl>
+        {profile.gaps.length > 0 && (
+          <p className={material.length ? "profile-gaps is-material" : "profile-gaps"}>
+            {/* No meter, no percentage. A short list of things that change a
+                result, and nothing when there is nothing to say. */}
+            <strong>
+              {profile.gaps.length === 1 ? "One thing" : `${profile.gaps.length} things`} would
+              sharpen your recommendations
+            </strong>
+            <a href="#improve">See what</a>
+          </p>
+        )}
       </section>
 
-      <section className="career-section" aria-labelledby="profile-checklist-title">
+      <section className="career-section" id="targets" aria-labelledby="targets-title">
         <div className="career-section-heading">
-          <div><p className="eyebrow">Recommended next steps</p><h2 id="profile-checklist-title">Complete Your Profile</h2></div>
-          <p>Each task explains how it improves your recommendations.</p>
+          <div>
+            <h2 id="targets-title">What you are looking for</h2>
+          </div>
+          <p>The roles and product areas Job Finder searches for on your behalf.</p>
         </div>
-        {incomplete.length ? (
-          <ol className="profile-checklist">
-            {incomplete.map((task) => (
-              <li key={task.id}>
-                <span className={`profile-task-state readiness-${task.status}`} aria-label={task.statusLabel}>
-                  {task.status === "partial" ? "◐" : "○"}
-                </span>
-                <div>
-                  <span className={`readiness-pill readiness-${task.status}`}>{task.statusLabel}</span>
-                  <h3>{task.label}</h3>
-                  <p>{task.benefit}</p>
-                </div>
-                <span className="profile-task-time">{task.minutes} min</span>
-                <Link className="secondary-button button-link" href={task.href}>Continue</Link>
+        <TargetsForm roles={profile.targets.roles} industries={profile.targets.industries} />
+      </section>
+
+      <section className="career-section" id="work-preferences" aria-labelledby="work-title">
+        <div className="career-section-heading">
+          <div>
+            <h2 id="work-title">How you want to work</h2>
+          </div>
+          <p>Preferences, not requirements. A role outside them is shown, with a note.</p>
+        </div>
+        <WorkPreferencesForm
+          mode={profile.work.mode}
+          employmentTypes={profile.work.employmentTypes}
+          compensation={profile.work.compensation}
+          exclusions={profile.work.exclusions}
+        />
+      </section>
+
+      <RoleTrackForm profile={profile.levelProfile} />
+
+      <WorkAuthorizationForm facts={profile.eligibility.facts} />
+
+      <section className="career-section" id="knows" aria-labelledby="knows-title">
+        <div className="career-section-heading">
+          <div>
+            <h2 id="knows-title">What Job Finder has evidence for</h2>
+          </div>
+          <p>
+            Read from your résumé and portfolio. {profile.evidence.resumeRecords} employment{" "}
+            {profile.evidence.resumeRecords === 1 ? "record" : "records"} and{" "}
+            {profile.evidence.portfolioProjects}{" "}
+            {profile.evidence.portfolioProjects === 1 ? "project" : "projects"}.
+          </p>
+        </div>
+        {profile.evidence.areas.length ? (
+          <ul className="profile-evidence">
+            {profile.evidence.areas.map((area) => (
+              <li key={area.category}>
+                <strong>{area.category}</strong>
+                <span>{area.labels.join(", ")}</span>
+                {/* Stated, because a claim the résumé only implies supports a
+                    weaker recommendation than one it states outright. */}
+                <small>
+                  {area.confirmed > 0 && `${area.confirmed} confirmed`}
+                  {area.confirmed > 0 && area.partial > 0 && " · "}
+                  {area.partial > 0 && `${area.partial} mentioned in passing`}
+                </small>
               </li>
             ))}
-          </ol>
+          </ul>
         ) : (
-          <div className="career-empty"><strong>Everything is complete.</strong><p>Your profile is ready to maintain as your career changes.</p></div>
+          <p className="profile-help">
+            Nothing yet. <Link href="/getting-started">Import a résumé</Link> to start.
+          </p>
+        )}
+        <p className="profile-help">
+          <Link href="/evidence">See every claim and its source</Link>
+        </p>
+      </section>
+
+      <section className="career-section" id="improve" aria-labelledby="improve-title">
+        <div className="career-section-heading">
+          <div>
+            <h2 id="improve-title">What to improve</h2>
+          </div>
+        </div>
+        {profile.gaps.length ? (
+          <ul className="profile-improve">
+            {profile.gaps.map((gap) => (
+              <li key={gap.id}>
+                <a href={gap.href}>{gap.label}</a>
+                <span>{gap.effect}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="profile-help">
+            Nothing is missing. Job Finder has what it needs to judge a role for you.
+          </p>
         )}
       </section>
 
-      <RoleTrackForm profile={levelProfile} />
-
-      <WorkAuthorizationForm facts={eligibilityFacts} />
-
-      <details className="completed-profile-items" id="completed-profile-items">
-        <summary>Completed ({completed.length})</summary>
-        {completed.length ? (
-          <ul>
-            {completed.map((task) => (
-              <li key={task.id}><span aria-hidden="true">✓</span><strong>{task.label}</strong><Link href={task.href}>Review</Link></li>
-            ))}
-          </ul>
-        ) : <p>No profile tasks are complete yet.</p>}
-      </details>
-
-      <details className="understanding-profile">
-        <summary>Understanding Your Profile</summary>
-        <div>
-          <section>
-            <h2>Why confidence may be limited</h2>
-            <p>Profile gaps reduce certainty; they do not lower your professional value or directly deduct points from a job’s match score.</p>
-          </section>
-          <section>
-            <h2>How Job Finder uses your information</h2>
-            <p>Verified evidence stays local, unknown information remains unknown, and every recommendation must remain explainable.</p>
-          </section>
-        </div>
+      {/* Low-frequency and read-only. Present, not prominent. */}
+      <details className="profile-more">
+        <summary>Other things Job Finder reads</summary>
+        <ul>
+          <li>
+            <Link href="/context/writing-voice">Writing voice</Link>
+            <span>Kept from a local file. Used only for writing help, not for matching.</span>
+          </li>
+          <li>
+            <Link href="/evidence">Career evidence</Link>
+            <span>Every claim, its source document, and how strongly it is supported.</span>
+          </li>
+          <li>
+            <Link href="/getting-started">Résumé import</Link>
+            <span>Re-import or re-approve employment records.</span>
+          </li>
+        </ul>
       </details>
     </ReadingLayout>
   );
+}
+
+/** A quiet marker distinguishing what you told Job Finder from what it worked out. */
+function Derived({ fact }: { fact: ProfileFact }) {
+  if (fact.source !== "derived" || !fact.value) return null;
+  return <em className="profile-derived"> — {fact.from}</em>;
 }

@@ -27,6 +27,11 @@ export type JobListItem = {
     officialAts: string;
   };
   status: JobStatus;
+  /**
+   * Every decision the user has recorded, newest first. Applications are
+   * derived from this sequence rather than stored separately.
+   */
+  decisions: { status: JobStatus; at: string; note: string | null }[];
   score: number;
   confidence: number;
   /**
