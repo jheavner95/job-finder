@@ -23,6 +23,11 @@ import {
 } from "../board-resolution";
 import { EMPLOYER_NAME_SOURCES, harvestEmployerNames, type EmployerNameSource } from "../employer-sources";
 import { detectCompanySource } from "../detection";
+import {
+  careersBoardFingerprint,
+  discoverAtsFromCareersPage,
+  type CareersDiscovery,
+} from "../careers-discovery";
 import { getOperationalCapability } from "../capabilities";
 import { checkRobots } from "../robots";
 import { EMPTY_JOB_SEARCH } from "../types";
@@ -289,18 +294,44 @@ export async function resolveCandidates(
     const probed = await Promise.all(chunk.map(async (candidate) => {
       let resolved: ResolvedBoard | null = null;
       let probes = 0;
-      for (const derived of boardCandidates(candidate.name)) {
-        const attempt = await probeBoard(client, gate, candidate.name, derived);
-        probes += attempt.probes;
-        if (attempt.board && attempt.board.confidence >= minimumConfidence) {
-          resolved = attempt.board;
-          break;
+      let careers: CareersDiscovery | null = null;
+
+      // The employer's own careers page names their board. Ask it first: a
+      // token like `mirage` or `sourcegraph91` is unreachable from the company
+      // name by any amount of normalisation, and no guess recovers it.
+      if (candidate.officialDomain) {
+        careers = await discoverAtsFromCareersPage(candidate.name, candidate.officialDomain, { client });
+        probes += careers.requests;
+        if (careers.providerId && careers.connectorKey && careers.confidence >= minimumConfidence) {
+          resolved = {
+            providerId: careers.providerId,
+            boardToken: careers.connectorKey,
+            careerUrl: careers.atsUrl ?? careers.careersUrl ?? "",
+            jobCount: careers.verifiedJobCount ?? 0,
+            identity: null,
+            identityConfirmed: true,
+            confidence: careers.confidence,
+            fingerprint: careersBoardFingerprint(careers.providerId, careers.connectorKey),
+          };
         }
       }
-      return { candidate, resolved, probes };
+
+      // Name derivation stays. It remains the only route for employers with no
+      // recorded domain, and the fallback when a careers surface yields nothing.
+      if (!resolved) {
+        for (const derived of boardCandidates(candidate.name)) {
+          const attempt = await probeBoard(client, gate, candidate.name, derived);
+          probes += attempt.probes;
+          if (attempt.board && attempt.board.confidence >= minimumConfidence) {
+            resolved = attempt.board;
+            break;
+          }
+        }
+      }
+      return { candidate, resolved, probes, careers };
     }));
 
-    for (const { candidate, resolved, probes } of probed) {
+    for (const { candidate, resolved, probes, careers } of probed) {
     summary.probesUsed += probes;
 
     if (!resolved) {
@@ -320,7 +351,9 @@ export async function resolveCandidates(
             : candidate.attempts + 1 >= MAX_ATTEMPTS ? "Unresolved" : "Pending",
           notes: unavailable
             ? "Every supported provider is withheld by its robots policy."
-            : "No public ATS board matched this employer name.",
+            : careers
+              ? careers.reason
+              : "No public ATS board matched this employer name.",
         },
       });
       continue;
@@ -364,7 +397,10 @@ export async function resolveCandidates(
         searchCriteria: EMPTY_JOB_SEARCH,
         enabled: true,
         health: "Healthy",
-        discoverySource: `auto:${candidate.source}`,
+        discoverySource: careers?.providerId === resolved.providerId
+          && careers?.connectorKey === resolved.boardToken
+          ? `careers:${candidate.source}`
+          : `auto:${candidate.source}`,
         discoveryConfidence: resolved.confidence,
         validationStatus: "Validated",
         jobsAvailable: resolved.jobCount,
@@ -389,7 +425,10 @@ export async function resolveCandidates(
         resolvedProvider: resolved.providerId,
         resolvedKey: resolved.boardToken,
         connectorId: connector.id,
-        notes: `Resolved with ${resolved.confidence}% confidence.`,
+        notes: careers?.providerId === resolved.providerId
+          && careers?.connectorKey === resolved.boardToken
+          ? `Resolved from the employer's careers surface (${careers.careersUrl ?? careers.officialDomain}) with ${resolved.confidence}% confidence.`
+          : `Resolved with ${resolved.confidence}% confidence.`,
       },
     });
     }
@@ -455,8 +494,40 @@ export type SeedRegistrationSummary = {
   promoted: number;
   alreadySeeded: number;
   skippedResolved: number;
+  /** Reviewed domains newly written onto an existing candidate. */
+  domainsWritten: number;
+  /** Candidates that already carried exactly the reviewed domain. */
+  domainsAlreadyCorrect: number;
+  /**
+   * Persisted domain differs from the artifact. Never overwritten — a
+   * disagreement between reviewed intelligence and stored identity is a
+   * question for a human, not something to resolve by last-writer-wins.
+   */
+  domainConflicts: Array<{ name: string; persisted: string; artifact: string }>;
   skipped: Array<{ name: string; reason: string }>;
 };
+
+export type SeedEmployerEntry = {
+  canonicalName: string;
+  officialDomain: string;
+  confidenceBand: string;
+  /** Artifact lifecycle state. `retired` entries never become candidates. */
+  status?: string;
+};
+
+/**
+ * A hostname, not a note.
+ *
+ * The retired artifact entry records its domain as the literal string
+ * "unverified", which is exactly the kind of value that must never reach a
+ * fetch. Shape is checked before anything is persisted.
+ */
+export function isPlausibleDomain(value: string): boolean {
+  const domain = value.trim().toLowerCase();
+  if (!domain || domain.length > 253 || /\s/.test(domain)) return false;
+  if (/^https?:\/\//.test(domain)) return false;
+  return /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(domain);
+}
 
 /**
  * Registers reviewed seed employers as candidates. Registration only — nothing
@@ -471,7 +542,7 @@ export type SeedRegistrationSummary = {
  */
 export async function registerSeedEmployers(
   database: PrismaClient,
-  employers: Array<{ canonicalName: string; officialDomain: string; confidenceBand: string }>,
+  employers: SeedEmployerEntry[],
 ): Promise<SeedRegistrationSummary> {
   const summary: SeedRegistrationSummary = {
     considered: employers.length,
@@ -479,18 +550,37 @@ export async function registerSeedEmployers(
     promoted: 0,
     alreadySeeded: 0,
     skippedResolved: 0,
+    domainsWritten: 0,
+    domainsAlreadyCorrect: 0,
+    domainConflicts: [],
     skipped: [],
   };
 
   for (const employer of employers) {
+    // A retired entry is intelligence we have chosen to stop acting on. It must
+    // never re-enter the candidate pool as a side effect of re-registration.
+    if (employer.status === "retired") {
+      summary.skipped.push({ name: employer.canonicalName, reason: "retired in the seed artifact" });
+      continue;
+    }
     const normalized = normalizeCompanyName(employer.canonicalName);
     if (!normalized || normalized.length < 2) {
       summary.skipped.push({ name: employer.canonicalName, reason: "name did not normalise" });
       continue;
     }
+
+    const domain = employer.officialDomain?.trim().toLowerCase() ?? "";
+    const usableDomain = isPlausibleDomain(domain) ? domain : null;
+    if (domain && !usableDomain) {
+      summary.skipped.push({
+        name: employer.canonicalName,
+        reason: `reviewed domain "${employer.officialDomain}" is not a hostname; not persisted`,
+      });
+    }
+
     const existing = await database.employerCandidate.findUnique({
       where: { normalizedName: normalized },
-      select: { id: true, source: true, status: true, notes: true },
+      select: { id: true, source: true, status: true, notes: true, officialDomain: true },
     });
 
     if (!existing) {
@@ -500,12 +590,28 @@ export async function registerSeedEmployers(
           normalizedName: normalized,
           source: SEED_SOURCE,
           status: "Pending",
+          officialDomain: usableDomain,
           notes: `Curated seed (${employer.confidenceBand}) · ${employer.officialDomain}`,
         },
       });
       summary.created += 1;
+      if (usableDomain) summary.domainsWritten += 1;
       continue;
     }
+
+    /**
+     * Persist the reviewed domain on any existing candidate, whatever its
+     * provenance or resolution state.
+     *
+     * This adds evidence; it never touches identity. `status`,
+     * `resolvedProvider`, `resolvedKey`, `connectorId` and `source` are all
+     * left exactly as found, so a resolved employer keeps its board and a
+     * harvested employer keeps its provenance. Recording the domain on an
+     * already-resolved candidate is what allows it to be re-resolved later if
+     * its board ever moves.
+     */
+    const domainOutcome = await persistReviewedDomain(database, existing, usableDomain, employer, summary);
+
     if (existing.source === SEED_SOURCE) {
       summary.alreadySeeded += 1;
       continue;
@@ -515,7 +621,8 @@ export async function registerSeedEmployers(
       summary.skippedResolved += 1;
       summary.skipped.push({
         name: employer.canonicalName,
-        reason: `already resolved via ${existing.source}; left untouched`,
+        reason: `already resolved via ${existing.source}; provenance left untouched`
+          + (domainOutcome === "written" ? "; reviewed domain recorded" : ""),
       });
       continue;
     }
@@ -530,6 +637,43 @@ export async function registerSeedEmployers(
     summary.promoted += 1;
   }
   return summary;
+}
+
+type DomainOutcome = "written" | "already-correct" | "conflict" | "none";
+
+/**
+ * Write the reviewed domain, or refuse to.
+ *
+ * The refusal case matters more than the write: when a candidate already
+ * carries a different domain, something disagrees with the reviewed artifact,
+ * and silently replacing it would destroy whichever of the two was right.
+ */
+async function persistReviewedDomain(
+  database: PrismaClient,
+  existing: { id: string; officialDomain: string | null },
+  usableDomain: string | null,
+  employer: SeedEmployerEntry,
+  summary: SeedRegistrationSummary,
+): Promise<DomainOutcome> {
+  if (!usableDomain) return "none";
+  if (existing.officialDomain === usableDomain) {
+    summary.domainsAlreadyCorrect += 1;
+    return "already-correct";
+  }
+  if (existing.officialDomain) {
+    summary.domainConflicts.push({
+      name: employer.canonicalName,
+      persisted: existing.officialDomain,
+      artifact: usableDomain,
+    });
+    return "conflict";
+  }
+  await database.employerCandidate.update({
+    where: { id: existing.id },
+    data: { officialDomain: usableDomain },
+  });
+  summary.domainsWritten += 1;
+  return "written";
 }
 
 export type TargetEmployerView = {

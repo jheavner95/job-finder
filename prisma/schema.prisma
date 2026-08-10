@@ -434,6 +434,10 @@ model EmployerCandidate {
   name             String
   normalizedName   String   @unique
   source           String
+  // Employer-controlled domain from trusted intelligence (curated seeds today).
+  // Never guessed from a company name. When present, resolution reads the
+  // employer's own careers surface before deriving a token from their name.
+  officialDomain   String?
   status           String   @default("Pending")
   attempts         Int      @default(0)
   probesUsed       Int      @default(0)
