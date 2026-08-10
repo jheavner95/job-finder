@@ -12,12 +12,42 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
   domainFit: { label: "Relevant product-domain fit", weight: 12 },
   strategicScope: { label: "Strategic scope", weight: 13 },
   handsOnDesign: { label: "Hands-on design expectations", weight: 11 },
-  portfolioEvidence: { label: "Portfolio evidence strength", weight: 12 },
-  compensationFit: { label: "Compensation fit", weight: 8, optional: true },
-  locationFit: { label: "Location & remote fit", weight: 7, optional: true },
-  companyPreference: { label: "Company preference fit", weight: 6 },
+  // The four below are declared but never populated: no import path has ever
+  // produced evidence for them on any job. They are marked so the score can
+  // tell "we looked and found nothing" apart from "nothing ever looks".
+  portfolioEvidence: { label: "Portfolio evidence strength", weight: 12, unimplemented: true },
+  compensationFit: { label: "Compensation fit", weight: 8, optional: true, unimplemented: true },
+  locationFit: { label: "Location & remote fit", weight: 7, optional: true, unimplemented: true },
+  companyPreference: { label: "Company preference fit", weight: 6, unimplemented: true },
   riskPenalty: { label: "Risk or concern penalties", weight: 10, isPenalty: true, optional: true },
 };
+
+/**
+ * What an unmeasured dimension is worth.
+ *
+ * The midpoint of the declared 0–1 rating domain, chosen a priori rather than
+ * fitted to the corpus. It encodes the only defensible reading of absent
+ * evidence: a dimension nobody measured is neither good nor bad.
+ *
+ * Not 0 — that would make silence equivalent to the worst possible finding,
+ * inventing negative evidence the posting never supplied. Not the observed
+ * mean either, which would make silence equivalent to a typical positive and
+ * leave the original defect in place.
+ */
+export const NEUTRAL_RATING = 0.5;
+
+/**
+ * Categories that participate in the score's denominator.
+ *
+ * Always the same set, whatever a given posting happens to say. That constancy
+ * is the whole correction: when the denominator shrinks to fit the evidence,
+ * a posting improves its score by staying silent about a weakness.
+ */
+export function evidenceBearingCategories(config = DEFAULT_SCORING_CONFIG) {
+  return (Object.keys(config) as Array<keyof ScoringConfig>).filter(
+    (category) => !config[category].isPenalty && !config[category].unimplemented,
+  );
+}
 
 export type ScoreResult = {
   score: number;
@@ -73,18 +103,42 @@ export function scoreJob(
   const applicableCategories = categories.filter(
     (item) => item.evidenceState !== "not_applicable",
   );
-  const knownPositiveWeight = knownCategories
-    .filter((item) => !config[item.category].isPenalty)
-    .reduce((sum, item) => sum + item.weight, 0);
-  const positiveContribution = knownCategories
-    .filter((item) => !config[item.category].isPenalty)
-    .reduce((sum, item) => sum + item.contribution, 0);
+  /*
+   * The denominator is fixed, not fitted to the evidence.
+   *
+   * It previously summed only the categories a posting happened to supply, so
+   * the score was a mean over whatever was present. That let a posting improve
+   * its own score by omitting a dimension it would have scored badly on:
+   * dropping a weak category raises the mean of the rest. DE-3I caught it live
+   * — an "Early Career" posting scored 75 / Strong Fit because saying nothing
+   * about seniority removed seniority from the calculation.
+   *
+   * Now every evidence-bearing category is always in the denominator, and a
+   * missing one contributes the neutral rating instead of vanishing. Absent
+   * evidence therefore pulls the score toward neutral: it cannot lift the
+   * score, and it does not invent a negative finding either.
+   *
+   * A posting that supplies every category is unaffected — there is nothing to
+   * impute, so the arithmetic is identical to before.
+   */
+  const bearing = categories.filter(
+    (item) => !config[item.category].isPenalty && !config[item.category].unimplemented,
+  );
+  const evidenceBearingWeight = bearing.reduce((sum, item) => sum + item.weight, 0);
+  const positiveContribution = bearing.reduce(
+    (sum, item) =>
+      sum
+      + (item.evidenceState === "positive" || item.evidenceState === "negative"
+        ? item.contribution
+        : NEUTRAL_RATING * item.weight),
+    0,
+  );
   const penaltyContribution = knownCategories
     .filter((item) => config[item.category].isPenalty)
     .reduce((sum, item) => sum + item.contribution, 0);
   const normalizedPositiveScore =
-    knownPositiveWeight > 0
-      ? (positiveContribution / knownPositiveWeight) * 100
+    evidenceBearingWeight > 0
+      ? (positiveContribution / evidenceBearingWeight) * 100
       : 0;
   const score = Math.max(
     0,

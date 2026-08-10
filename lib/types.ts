@@ -29,7 +29,22 @@ export type ScoreCategory = (typeof SCORE_CATEGORIES)[number];
 
 export type ScoringConfig = Record<
   ScoreCategory,
-  { label: string; weight: number; isPenalty?: boolean; optional?: boolean }
+  {
+    label: string;
+    weight: number;
+    isPenalty?: boolean;
+    optional?: boolean;
+    /**
+     * No code path has ever produced evidence for this category, for any job.
+     *
+     * Such a category carries no information that could distinguish one
+     * opportunity from another, so it is excluded from the score entirely
+     * rather than being treated as evidence we happen to be missing. Deleting
+     * the flag is all that is required to bring the dimension into the score
+     * once something actually populates it.
+     */
+    unimplemented?: boolean;
+  }
 >;
 
 export const EVIDENCE_STATES = [
