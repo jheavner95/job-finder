@@ -38,7 +38,14 @@ export function JobRow({ job }: { job: JobRowItem }) {
           </span>
           <span className="company-name">{job.company}</span>
           <span className="job-meta">
-            {job.location}<i>·</i>{job.remoteStatus}<i>·</i>{job.employmentType}
+            {job.location}<i>·</i>
+            {/* The work mode is already here; marking it in place says whether
+                it suits the candidate without adding a fourth badge to a row
+                that already carries a score, a tier, level fit and eligibility. */}
+            <span className={job.workMode?.compatibility === "INCOMPATIBLE" ? "work-mode-mismatch" : undefined}>
+              {job.workMode?.compatibility === "INCOMPATIBLE" ? "⚠ " : ""}{job.remoteStatus}
+            </span>
+            <i>·</i>{job.employmentType}
           </span>
           <span className="match-line">{job.matchReason}</span>
           <span
@@ -51,10 +58,19 @@ export function JobRow({ job }: { job: JobRowItem }) {
         </span>
       </Link>
       <div className="job-side">
-        <div className={`score score-${tierTone(tier)}`}>
+        <div className={`score score-${job.evidenceCoverage.sufficient ? tierTone(tier) : "unmeasured"}`}>
           <strong>{job.score}</strong><span>match</span>
         </div>
-        <span className="confidence-label">{tier}</span>
+        {/* When most of the model went unmeasured, the tier is a claim the
+            evidence does not support. Say what is actually true instead:
+            we did not measure enough of this posting to place it. */}
+        {job.evidenceCoverage.sufficient ? (
+          <span className="confidence-label">{tier}</span>
+        ) : (
+          <span className="insufficient-evidence" title={`Only ${Math.round(job.evidenceCoverage.coverage * 100)}% of the scoring model could be measured from this posting.`}>
+            Insufficient evidence
+          </span>
+        )}
         <span className="confidence-label">{job.confidence}% confidence</span>
         {/* Three independent readings, side by side. They are allowed to
             disagree — that disagreement is the useful part. */}

@@ -3,6 +3,7 @@ import { WorkspaceLayout } from "@/app/components/PageLayout";
 import { PageHeader } from "@/app/components/PageHeader";
 import { getJobs } from "@/lib/queries";
 import { OPPORTUNITY_TIERS, isReviewable } from "@/lib/opportunity-tiers";
+import { compareByDecision } from "@/lib/decision-order";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -46,13 +47,14 @@ export default async function ReviewPage({
     .filter((job) =>
       inFilter(job, selected)
       && `${job.title} ${job.company} ${job.location}`.toLowerCase().includes(query))
-    // Definitively ineligible roles stay in the queue but sink below the ones
-    // that can actually be pursued. Removing them would hide a real posting and
-    // make the discovered corpus look smaller than it is.
-    .sort((left, right) => Number(isBlocked(left)) - Number(isBlocked(right)));
+    // Eligibility → tier → level fit → score. Ineligible roles sink rather
+    // than disappear; among equally strong roles the ones at the candidate's
+    // own level come first. See lib/decision-order.ts for why that order.
+    .sort(compareByDecision);
   const reviewable = jobs.filter((job) => isReviewable(job.tier) && !isOffLevel(job)).length;
   const offLevel = jobs.filter((job) => isReviewable(job.tier) && isOffLevel(job)).length;
   const blocked = filtered.filter(isBlocked).length;
+  const insufficient = filtered.filter((job) => !job.evidenceCoverage.sufficient).length;
   const needsCheck = filtered.filter(
     (job) => job.eligibilityAssessment?.verdict === "REVIEW_REQUIRED",
   ).length;
@@ -67,6 +69,10 @@ export default async function ReviewPage({
         <div className="filter-tabs" role="group" aria-label="Filter opportunities by fit">
           {filters.map((filter) => {
             const count = jobs.filter((job) => inFilter(job, filter)).length;
+            // A tier the corrected model can no longer reach should not
+            // advertise itself. The band still exists; the tab appears only
+            // when something is in it.
+            if (filter === "Low Relevance" && count === 0 && selected !== filter) return null;
             const href = filter === "Reviewable"
               ? "/review"
               : `/review?tier=${encodeURIComponent(filter)}`;
@@ -90,6 +96,7 @@ export default async function ReviewPage({
           <b>{filtered.length - blocked}</b> of {reviewable} you can pursue
           <small> · {jobs.length} discovered</small>
           {needsCheck > 0 && <small> · {needsCheck} need an eligibility check</small>}
+          {insufficient > 0 && <small> · {insufficient} need more evidence</small>}
           {offLevel > 0 && <small> · {offLevel} off level</small>}
           {blocked > 0 && <small> · {blocked} blocked by eligibility</small>}
         </span>

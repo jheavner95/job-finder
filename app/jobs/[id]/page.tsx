@@ -6,6 +6,7 @@ import { ReadingLayout } from "@/app/components/PageLayout";
 import { StatusPill } from "@/app/components/JobRow";
 import { EligibilityPanel } from "@/app/components/EligibilityBadge";
 import { LevelFitPanel } from "@/app/components/LevelFitBadge";
+import { workModeCompatibilityLabel, workModeLabel, workModeTone } from "@/lib/work-mode";
 import { LEVEL_LABEL } from "@/lib/level-fit/ladder";
 import { targetBand } from "@/lib/level-fit";
 import { loadCandidateLevelProfile } from "@/lib/level-fit/service";
@@ -165,8 +166,11 @@ export default async function JobDetailPage({
           </div>
           <small>Discovered {job.verification.importAge} · {job.verification.label}</small>
         </div>
-        <div className="opportunity-score">
-          <strong>{job.score}</strong><span>Match</span><small>{tier}</small>
+        <div className={`opportunity-score${job.evidenceCoverage.sufficient ? "" : " opportunity-score-unmeasured"}`}>
+          <strong>{job.score}</strong><span>Match</span>
+          {/* The tier is a claim about fit. Withhold it here too when the
+              evidence does not support one, so the hero and the body agree. */}
+          <small>{job.evidenceCoverage.sufficient ? tier : "Insufficient evidence"}</small>
         </div>
         <OpportunityActions
           jobId={job.id}
@@ -179,10 +183,20 @@ export default async function JobDetailPage({
       </header>
 
       <div className="opportunity-coaching">
+        {!job.evidenceCoverage.sufficient && (
+          /* The tier below is still shown, but the posting has to say up front
+             that most of the model went unmeasured — otherwise the page reads
+             as a measured verdict on evidence that does not exist. */
+          <p className="insufficient-evidence-note" role="status">
+            <strong>Insufficient evidence.</strong> Only {Math.round(job.evidenceCoverage.coverage * 100)}% of the
+            scoring model could be measured from this posting, so the score below rests mostly on a
+            neutral assumption rather than on anything the posting said.
+          </p>
+        )}
         <section className="match-summary" aria-labelledby="match-summary-title">
           <div>
             <p className="eyebrow">Should you apply?</p>
-            <h2 id="match-summary-title">{tier}</h2>
+            <h2 id="match-summary-title">{job.evidenceCoverage.sufficient ? tier : "Not enough evidence to place this role"}</h2>
             <p className="coaching-lead">{job.intelligence?.topReason ?? job.summary}</p>
           </div>
           <div className="match-summary-columns">
@@ -194,6 +208,26 @@ export default async function JobDetailPage({
               : <p>No material concern was detected.</p>}</div>
           </div>
         </section>
+
+        {job.workMode && job.workMode.compatibility !== "NO_PREFERENCE" && (
+          /* Deliberately a single line, not a fourth panel. Work mode is a
+             preference, not a verdict on the role, and DE-3M owns how these
+             dimensions should finally be composed. */
+          <section className={`work-mode-line work-mode-${workModeTone(job.workMode.compatibility)}`}>
+            <span className="eyebrow">Work mode · separate from match score</span>
+            <p>
+              <strong>{workModeCompatibilityLabel(job.workMode.compatibility)}</strong>
+              <span> {job.workMode.headline}</span>
+            </p>
+            <small>
+              Posting says {workModeLabel(job.workMode.postingMode).toLowerCase()}
+              {job.workMode.evidence ? ` ("${job.workMode.evidence}")` : ""}
+              {job.workMode.geographicRestriction ? ` · restricted to ${job.workMode.geographicRestriction}` : ""}
+              {" · you asked for "}
+              {job.workMode.preferred.map((mode) => workModeLabel(mode).toLowerCase()).join(" or ")}.
+            </small>
+          </section>
+        )}
 
         <LevelFitPanel assessment={job.levelFit} candidateSummary={candidateSummary} />
 

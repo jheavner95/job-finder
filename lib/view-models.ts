@@ -1,5 +1,7 @@
 import type { EligibilityAssessment } from "./eligibility/types";
 import type { LevelFitAssessment } from "./level-fit/types";
+import type { WorkModeAssessment } from "./work-mode";
+import type { EvidenceCoverage } from "./decision-order";
 import type { CategoryResult } from "./types";
 import type { JobStatus } from "./types";
 import type { OpportunityIntelligenceData } from "./candidate-intelligence/types";
@@ -37,6 +39,18 @@ export type JobListItem = {
   eligibilityAssessment: EligibilityAssessment | null;
   /** Career-level appropriateness. Independent of both score and eligibility. */
   levelFit: LevelFitAssessment | null;
+  /**
+   * Whether the working arrangement suits the candidate. Computed at read
+   * time from data already persisted, and deliberately outside the score:
+   * the same role listed in three cities is the same match.
+   */
+  workMode: WorkModeAssessment | null;
+  /**
+   * How much of the scoring model was actually measured for this posting.
+   * When insufficient, the score is mostly the neutral prior and the tier
+   * label is suppressed rather than asserted.
+   */
+  evidenceCoverage: EvidenceCoverage;
   summary: string;
   matchReason: string;
   concerns: string[];

@@ -34,6 +34,8 @@ function job(
     eligibility: "eligible",
     eligibilityAssessment: null,
     levelFit: null,
+    workMode: null,
+    evidenceCoverage: { coverage: 1, sufficient: true },
     summary: "Deterministic test summary.",
     matchReason: "Strong deterministic fit.",
     concerns: [],

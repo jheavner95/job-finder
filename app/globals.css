@@ -2425,3 +2425,48 @@ button, .primary-button, .secondary-button, .text-button { font-size: var(--text
 .level-derived dt { color: var(--muted); font-size: var(--text-label); text-transform: uppercase; letter-spacing: .04em; }
 .level-derived dd { margin: 2px 0 0; font-weight: 700; }
 .role-track .preference-form small { display: block; color: var(--muted); font-weight: 400; }
+
+/* ---------------------------------------------------------------
+   Work-mode compatibility
+   A preference, not a verdict on the role — so it is marked in
+   place on the row and stated as one line on the detail page,
+   rather than becoming a fourth badge competing with the score.
+   --------------------------------------------------------------- */
+
+.work-mode-mismatch { color: var(--danger); font-weight: 700; }
+
+.work-mode-line {
+  display: grid; gap: 2px;
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--line); border-left-width: 4px;
+  border-radius: var(--radius-lg); background: var(--white);
+}
+.work-mode-line.work-mode-clear { border-left-color: var(--green); background: var(--success-soft); }
+.work-mode-line.work-mode-warning { border-left-color: var(--warning); background: var(--warning-soft); }
+.work-mode-line.work-mode-blocked { border-left-color: var(--danger); background: var(--danger-soft); }
+.work-mode-line.work-mode-neutral { border-left-color: var(--line); background: var(--surface-subtle); }
+.work-mode-line p { margin: 0; color: var(--ink); }
+.work-mode-line small { color: var(--muted); }
+
+/* ---------------------------------------------------------------
+   Insufficient evidence
+   A posting where most of the scoring model went unmeasured is not
+   a weak match — it is an unmeasured one. The tier claim is
+   withdrawn rather than restated in a softer colour.
+   --------------------------------------------------------------- */
+
+.insufficient-evidence {
+  margin-top: 2px; color: var(--muted); font-size: var(--text-label);
+  font-weight: 700; font-style: italic;
+}
+.score-unmeasured { border-color: var(--line); color: var(--muted); opacity: .72; }
+.score-unmeasured strong { color: var(--muted); }
+
+.insufficient-evidence-note {
+  padding: var(--space-3) var(--space-5);
+  border: 1px dashed var(--line); border-radius: var(--radius-lg);
+  background: var(--surface-subtle); color: var(--muted);
+}
+.insufficient-evidence-note strong { color: var(--ink); }
+.opportunity-score-unmeasured strong { color: var(--muted); }
+.opportunity-score-unmeasured small { font-style: italic; color: var(--muted); }

@@ -17,6 +17,8 @@ import { parseStoredConstraints } from "./eligibility/service";
 import type { EligibilityAssessment } from "./eligibility/types";
 import { parseStoredPostingLevel } from "./level-fit/service";
 import type { LevelFitAssessment } from "./level-fit/types";
+import { assessWorkMode } from "./work-mode";
+import { evidenceCoverage } from "./decision-order";
 import {
   type Tiered,
   compareByTier,
@@ -183,7 +185,13 @@ function clean(value: string) {
   return plainPostingText(value);
 }
 
-function toListItem(job: IncludedJob): TieredJobListItem {
+/** The declared preference, read once per query rather than once per job. */
+async function candidateWorkMode(): Promise<string | null> {
+  const preferences = await prisma.candidateCareerPreferences.findFirst({ select: { workMode: true } });
+  return preferences?.workMode ?? null;
+}
+
+function toListItem(job: IncludedJob, preferredWorkMode: string | null): TieredJobListItem {
   const evaluation = job.evaluations[0];
   const metadata = evaluation
     ? evaluationMetadata(evaluation.reasoning)
@@ -214,6 +222,8 @@ function toListItem(job: IncludedJob): TieredJobListItem {
     eligibility: metadata.eligibility,
     eligibilityAssessment: eligibilityAssessment(job),
     levelFit: levelFitAssessment(job),
+    workMode: assessWorkMode(job.location, job.remoteStatus, preferredWorkMode),
+    evidenceCoverage: evidenceCoverage(evaluation ? categoryResults(evaluation.categoryResults) : []),
     summary: evaluation
       ? summaryFromReasoning(evaluation.reasoning)
       : "Not yet evaluated.",
@@ -235,7 +245,8 @@ export async function getJobs(): Promise<TieredJobListItem[]> {
     include: jobInclude,
     orderBy: { title: "asc" },
   });
-  return jobs.map(toListItem).sort(compareByTier);
+  const preferredWorkMode = await candidateWorkMode();
+  return jobs.map((job) => toListItem(job, preferredWorkMode)).sort(compareByTier);
 }
 
 export async function getJob(id: string): Promise<TieredJobDetailModel | null> {
@@ -251,7 +262,7 @@ export async function getJob(id: string): Promise<TieredJobDetailModel | null> {
   const metadataObject = (value: Prisma.JsonValue | null) =>
     typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};
   return {
-    ...toListItem(job),
+    ...toListItem(job, await candidateWorkMode()),
     provenance: {
       discoveryMethod: job.sourceJobId ? "Public ATS discovery" : job.source.name === "Manual import" ? "Manual import" : "Certified connector import",
       canonicalUrl: job.sourceUrl,
